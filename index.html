@@ -1,0 +1,1715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#4f46e5" />
+  <meta name="description" content="Training & Event Attendance Manager — QR check-in and admin panel" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Attendance" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>" />
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%234f46e5' width='100' height='100' rx='20'/><text y='.72em' font-size='60' text-anchor='middle' x='50'>📋</text></svg>" />
+  <link rel="manifest" id="manifest-link" />
+  <title>Training Attendance Manager</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc', 400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca', 800: '#3730a3', 900: '#312e81' }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- html5-qrcode (QR scanner) -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <!-- qrcodejs (QR generator) -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+
+  <style>
+    /* Smooth page transitions & safe-area padding for notched phones */
+    body { -webkit-tap-highlight-color: transparent; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; animation: fadeIn 0.2s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    .bottom-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+    .toast { animation: slideUp 0.3s ease, fadeOut 0.3s ease 2.7s forwards; }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+    /* QR reader container */
+    #qr-reader { border-radius: 1rem; overflow: hidden; }
+    #qr-reader video { border-radius: 1rem; }
+    /* Pulse indicator */
+    .pulse-dot { animation: pulse 1.5s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    /* Spinner for loading states */
+    .animate-spin { animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner-container { display: inline-flex; align-items: center; gap: 6px; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-800 font-sans antialiased">
+
+  <!-- ========== APP SHELL ========== -->
+  <div class="max-w-lg mx-auto min-h-screen flex flex-col bg-white shadow-2xl relative">
+
+    <!-- Header -->
+    <header class="bg-brand-600 text-white px-5 py-4 flex items-center justify-between sticky top-0 z-30 shadow-md">
+      <div>
+        <h1 class="text-lg font-bold tracking-tight leading-tight">Training Attendance</h1>
+        <p class="text-brand-200 text-xs" id="header-subtitle">Manager</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="online-badge" class="hidden bg-green-400 text-green-900 text-xs font-semibold px-2.5 py-1 rounded-full pulse-dot">● Live</span>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 overflow-y-auto px-4 pt-4 pb-24">
+
+      <!-- ========== ADMIN PANEL ========== -->
+      <section id="panel-admin" class="tab-panel active space-y-5">
+
+        <!-- Dashboard stats -->
+        <div class="grid grid-cols-2 gap-3">
+          <div class="bg-brand-50 rounded-2xl p-4 border border-brand-100">
+            <p class="text-3xl font-extrabold text-brand-700" id="stat-total-events">0</p>
+            <p class="text-xs text-brand-500 font-medium uppercase tracking-wide mt-1">Total Events</p>
+          </div>
+          <div class="bg-emerald-50 rounded-2xl p-4 border border-emerald-100">
+            <p class="text-3xl font-extrabold text-emerald-700" id="stat-total-attendees">0</p>
+            <p class="text-xs text-emerald-500 font-medium uppercase tracking-wide mt-1">Total Check-ins</p>
+          </div>
+        </div>
+
+        <!-- Create Event Form -->
+        <div>
+          <button id="btn-show-form"
+            class="w-full bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white font-semibold py-3 px-5 rounded-xl transition-all duration-150 flex items-center justify-center gap-2 shadow-md shadow-brand-200">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+            Create New Event
+          </button>
+        </div>
+
+        <!-- New Event Form (hidden by default) -->
+        <form id="form-new-event" class="hidden bg-white rounded-2xl border border-gray-200 p-5 space-y-4 shadow-sm">
+          <h3 class="font-semibold text-gray-700 text-sm uppercase tracking-wide">New Training Event</h3>
+          <div>
+            <label class="block text-xs font-semibold text-gray-500 mb-1">Event Name *</label>
+            <input type="text" id="ev-name" required placeholder="e.g. Fire Safety Workshop"
+              class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-400 focus:border-brand-400 outline-none transition" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Date *</label>
+              <input type="date" id="ev-date" required
+                class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-400 focus:border-brand-400 outline-none transition" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Time</label>
+              <input type="time" id="ev-time" value="09:00"
+                class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-400 focus:border-brand-400 outline-none transition" />
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-500 mb-1">Location</label>
+            <input type="text" id="ev-location" placeholder="e.g. Conference Room A"
+              class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-400 focus:border-brand-400 outline-none transition" />
+          </div>
+          <div class="flex gap-3 pt-1">
+            <button type="button" id="btn-cancel-form"
+              class="flex-1 border border-gray-300 text-gray-600 font-semibold py-2.5 rounded-xl hover:bg-gray-50 active:scale-[0.98] transition text-sm">Cancel</button>
+            <button type="submit"
+              class="flex-1 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white font-semibold py-2.5 rounded-xl transition text-sm shadow-md shadow-brand-200">Save Event</button>
+          </div>
+        </form>
+
+        <!-- Event List -->
+        <div>
+          <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Your Events</h2>
+          <div id="event-list" class="space-y-3">
+            <p class="text-sm text-gray-400 text-center py-8">No events yet. Create one above.</p>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ========== SCANNER / CHECK-IN PANEL ========== -->
+      <section id="panel-scanner" class="tab-panel space-y-5">
+
+        <!-- Active Event Selector -->
+        <div>
+          <label class="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Active Event</label>
+          <select id="scan-event-select"
+            class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-brand-400 focus:border-brand-400 outline-none transition bg-white">
+            <option value="">-- Select an event --</option>
+          </select>
+        </div>
+
+        <!-- QR Scanner Section -->
+        <div class="bg-gray-900 rounded-2xl overflow-hidden shadow-lg relative" id="scanner-container">
+          <div id="qr-reader" class="w-full" style="min-height:280px;"></div>
+          <div id="qr-placeholder" class="flex flex-col items-center justify-center text-gray-500 py-16 px-4 text-center">
+            <svg class="w-16 h-16 mb-3 text-gray-600" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zm0 9.75c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zm9.75-9.75c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5zm0 9.75c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5z"/>
+            </svg>
+            <p class="text-sm font-medium">Select an event &amp; tap Start Scan</p>
+          </div>
+          <div class="flex gap-2 p-3 bg-gray-800">
+            <button id="btn-start-scan"
+              class="flex-1 bg-brand-500 hover:bg-brand-400 active:scale-[0.98] text-white font-semibold py-2.5 px-4 rounded-xl transition text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+              ▶ Start Scanner
+            </button>
+            <button id="btn-stop-scan"
+              class="bg-red-500 hover:bg-red-400 active:scale-[0.98] text-white font-semibold py-2.5 px-4 rounded-xl transition text-sm hidden">
+              ⏹ Stop
+            </button>
+          </div>
+        </div>
+
+        <!-- Last Scan Result -->
+        <div id="scan-result" class="hidden bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-xs text-gray-500 uppercase tracking-wide font-semibold">Last Scan</p>
+              <p class="text-lg font-bold text-gray-800" id="scan-result-name">—</p>
+              <p class="text-sm text-gray-500" id="scan-result-detail">—</p>
+            </div>
+            <span id="scan-result-badge" class="text-xs font-bold px-3 py-1.5 rounded-full">—</span>
+          </div>
+        </div>
+
+        <!-- Manual Check-in -->
+        <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+          <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg>
+            Manual Check-in (PIN)
+          </h3>
+          <form id="form-manual-checkin" class="flex gap-3">
+            <input type="text" id="input-pin" placeholder="Enter ID / PIN" autocomplete="off"
+              class="flex-1 border border-gray-300 rounded-xl px-4 py-3 text-sm font-mono tracking-widest focus:ring-2 focus:ring-brand-400 focus:border-brand-400 outline-none transition" />
+            <button type="submit"
+              class="bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-semibold py-3 px-5 rounded-xl transition text-sm shadow-md shadow-emerald-200">
+              Check In
+            </button>
+          </form>
+          <p id="manual-msg" class="text-xs text-gray-400 mt-2 hidden"></p>
+        </div>
+
+        <!-- Recent Check-ins for this event -->
+        <div>
+          <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Recent Check-ins</h3>
+          <div id="recent-checkins" class="space-y-2">
+            <p class="text-sm text-gray-400 text-center py-6">No check-ins for this event yet.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== EVENT ATTENDEES MODAL (Admin drills into specific event) ========== -->
+      <section id="panel-event-detail" class="tab-panel space-y-4">
+        <button id="btn-back-to-admin" class="text-brand-600 font-semibold text-sm flex items-center gap-1 hover:underline">
+          ← Back to Dashboard
+        </button>
+        <div id="event-detail-content"></div>
+      </section>
+
+      <!-- ========== REPORTS PANEL ========== -->
+      <section id="panel-reports" class="tab-panel space-y-5">
+        <div>
+          <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Attendance Reports</h2>
+          <p class="text-xs text-gray-400">Email a CSV attendance report for any event. The report includes every registered attendee with <span class="text-emerald-600 font-semibold">Attended</span> / <span class="text-red-500 font-semibold">Absent</span> status.</p>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-4">
+          <!-- Event Selector -->
+          <div>
+            <label class="block text-xs font-semibold text-gray-500 mb-1.5" for="report-event-select">Select Event</label>
+            <select id="report-event-select"
+              class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-brand-400 focus:border-brand-400 outline-none transition bg-white">
+              <option value="">-- Choose an event --</option>
+            </select>
+          </div>
+
+          <!-- Email Input -->
+          <div>
+            <label class="block text-xs font-semibold text-gray-500 mb-1.5" for="report-email-input">Recipient Email</label>
+            <input type="email" id="report-email-input" placeholder="hr@example.com"
+              class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-400 focus:border-brand-400 outline-none transition" />
+          </div>
+
+          <!-- Send Button -->
+          <button id="btn-report-send" disabled
+            class="w-full bg-brand-600 hover:bg-brand-700 active:scale-[0.98] disabled:bg-gray-300 disabled:cursor-not-allowed disabled:shadow-none text-white font-semibold py-3 rounded-xl transition text-sm shadow-md shadow-brand-200">
+            <span id="report-btn-text">✉ Send Email Report</span>
+            <span id="report-btn-spinner" class="hidden animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full ml-1 align-middle"></span>
+          </button>
+
+          <!-- Status Message -->
+          <div id="report-status" class="hidden rounded-xl p-3 text-sm">
+            <p id="report-status-text" class="font-semibold"></p>
+            <p id="report-status-detail" class="text-xs mt-0.5"></p>
+          </div>
+        </div>
+
+        <!-- Recent Reports Sent -->
+        <div>
+          <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Recent Reports</h3>
+          <div id="report-history" class="space-y-2">
+            <p class="text-sm text-gray-400 text-center py-4">No reports sent yet this session.</p>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ========== BOTTOM TAB NAV ========== -->
+    <nav class="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-gray-200 bottom-safe z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.04)]">
+      <div class="flex">
+        <button data-tab="admin"
+          class="tab-btn flex-1 flex flex-col items-center py-2.5 text-brand-600 transition active:scale-95">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zm0 9.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zm0 9.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"/>
+          </svg>
+          <span class="text-[10px] font-semibold mt-0.5">Admin</span>
+        </button>
+        <button data-tab="reports"
+          class="tab-btn flex-1 flex flex-col items-center py-2.5 text-gray-400 transition active:scale-95">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+          </svg>
+          <span class="text-[10px] font-semibold mt-0.5">Reports</span>
+        </button>
+        <button data-tab="scanner"
+          class="tab-btn flex-1 flex flex-col items-center py-2.5 text-gray-400 transition active:scale-95">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z"/>
+          </svg>
+          <span class="text-[10px] font-semibold mt-0.5">Scanner</span>
+        </button>
+      </div>
+    </nav>
+
+    <!-- ========== TOAST CONTAINER ========== -->
+    <div id="toast-container" class="fixed bottom-24 left-0 right-0 mx-auto max-w-sm z-50 flex flex-col items-center gap-2 pointer-events-none"></div>
+  </div>
+
+  <!-- ========== SERVICE WORKER REGISTRATION ========== -->
+  <script>
+    // ── PWA: Register Service Worker ──────────────────────────
+    if ('serviceWorker' in navigator) {
+      const swCode = `
+        const CACHE = 'attendance-v1';
+        const ASSETS = [
+          '/',
+          '/index.html',
+          'https://cdn.tailwindcss.com',
+          'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js'
+        ];
+        self.addEventListener('install', e => {
+          e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).catch(() => {}));
+        });
+        self.addEventListener('fetch', e => {
+          // Only handle http/https requests (skip blob:, chrome-extension:, etc.)
+          if (!e.request.url.startsWith('http')) return;
+          e.respondWith(
+            caches.match(e.request).then(r => r || fetch(e.request).then(resp => {
+              if (resp.ok && resp.status === 200) {
+                const clone = resp.clone();
+                caches.open(CACHE).then(c => c.put(e.request, clone));
+              }
+              return resp;
+            }).catch(() => caches.match(e.request)))
+          );
+        });
+      `;
+      const swBlob = new Blob([swCode], { type: 'application/javascript' });
+      const swUrl = URL.createObjectURL(swBlob);
+      navigator.serviceWorker.register(swUrl).catch(() => {});
+    }
+  </script>
+
+  <!-- ========== PWA MANIFEST (inline via blob URL) ========== -->
+  <script>
+    (function() {
+      const manifest = {
+        name: 'Training Attendance Manager',
+        short_name: 'Attendance',
+        description: 'QR-based training & event attendance tracker',
+        start_url: '.',
+        display: 'standalone',
+        orientation: 'portrait',
+        background_color: '#ffffff',
+        theme_color: '#4f46e5',
+        icons: [{
+          src: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect fill="#4f46e5" width="192" height="192" rx="32"/><text y="128" font-size="96" text-anchor="middle" x="96">📋</text></svg>'),
+          sizes: '192x192',
+          type: 'image/svg+xml',
+          purpose: 'any maskable'
+        }, {
+          src: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect fill="#4f46e5" width="512" height="512" rx="64"/><text y="340" font-size="256" text-anchor="middle" x="256">📋</text></svg>'),
+          sizes: '512x512',
+          type: 'image/svg+xml',
+          purpose: 'any maskable'
+        }]
+      };
+      const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+      document.getElementById('manifest-link').href = URL.createObjectURL(blob);
+    })();
+  </script>
+
+  <!-- ========== APP LOGIC ========== -->
+  <script>
+    (function() {
+      // ── DOM refs ────────────────────────────────────────────
+      const $ = (sel) => document.querySelector(sel);
+      const $$ = (sel) => document.querySelectorAll(sel);
+
+      // ── State ───────────────────────────────────────────────
+      const STORAGE_KEY = 'attendance_manager_data';
+
+      // Demo users (pre-loaded into localStorage on first run)
+      const DEMO_USERS = [
+        { id: 'U001', pin: '1001', name: 'Alice Johnson', dept: 'Engineering' },
+        { id: 'U002', pin: '1002', name: 'Bob Martinez',  dept: 'HR' },
+        { id: 'U003', pin: '1003', name: 'Carol Nguyen',  dept: 'Operations' },
+        { id: 'U004', pin: '1004', name: 'David Kim',     dept: 'Engineering' },
+        { id: 'U005', pin: '1005', name: 'Eva Patel',     dept: 'Finance' },
+        { id: 'U006', pin: '2001', name: 'Frank Okafor',  dept: 'Safety' },
+        { id: 'U007', pin: '2002', name: 'Grace Li',      dept: 'Safety' },
+      ];
+
+      function loadData() {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) return JSON.parse(raw);
+        // First run: seed demo data
+        const seed = { users: DEMO_USERS, events: [], attendees: [], registrations: [] };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(seed));
+        return seed;
+      }
+
+      function saveData(data) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      }
+
+      let data = loadData();
+
+      // ── Utilities ───────────────────────────────────────────
+      function uid() { return 'ev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7); }
+      function attId() { return 'at_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7); }
+      function fmtDate(d) { return new Date(d).toLocaleDateString('en-US', { weekday:'short', year:'numeric', month:'short', day:'numeric' }); }
+      function fmtTime(t) { if (!t) return ''; const [h,m] = t.split(':'); const hr = parseInt(h); const ampm = hr >= 12 ? 'PM' : 'AM'; const h12 = hr % 12 || 12; return `${h12}:${m} ${ampm}`; }
+
+      function toast(message, type = 'success') {
+        const container = $('#toast-container');
+        const el = document.createElement('div');
+        const bg = type === 'success' ? 'bg-emerald-600' : type === 'error' ? 'bg-red-500' : 'bg-brand-600';
+        el.className = `toast ${bg} text-white text-sm font-semibold px-5 py-3 rounded-2xl shadow-xl pointer-events-auto max-w-xs text-center`;
+        el.textContent = message;
+        container.appendChild(el);
+        setTimeout(() => el.remove(), 3000);
+      }
+
+      // ── Tab Navigation ──────────────────────────────────────
+      let currentTab = 'admin';
+      const tabBtns = $$('.tab-btn');
+      const panels = {
+        admin: $('#panel-admin'),
+        scanner: $('#panel-scanner'),
+        detail: $('#panel-event-detail'),
+        reports: $('#panel-reports')
+      };
+
+      function switchTab(tab) {
+        if (currentTab === tab && tab !== 'detail') return;
+        currentTab = tab;
+        Object.values(panels).forEach(p => p.classList.remove('active'));
+        if (panels[tab]) panels[tab].classList.add('active');
+        // Update bottom nav active state
+        tabBtns.forEach(b => {
+          const isActive = b.dataset.tab === tab || (tab === 'detail' && b.dataset.tab === 'admin') || (tab === 'detail' && b.dataset.tab === 'reports');
+          b.classList.toggle('text-brand-600', isActive);
+          b.classList.toggle('text-gray-400', !isActive);
+        });
+        if (tab === 'admin' || tab === 'detail') stopScanner();
+        if (tab === 'scanner') { populateEventSelect(); renderRecentCheckins(); }
+        if (tab === 'admin') renderAll();
+        if (tab === 'reports') { populateReportEventSelect(); renderReportHistory(); }
+        $('#header-subtitle').textContent = tab === 'scanner' ? 'Check-in' : tab === 'detail' ? 'Event Details' : tab === 'reports' ? 'Reports' : 'Manager';
+      }
+
+      tabBtns.forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+
+      // ── Toast-based demos of the PWA ────────────────────────
+      function renderAll() {
+        data = loadData(); // refresh from storage
+        renderDashboard();
+        renderEventList();
+      }
+
+      // ── Admin: Dashboard Stats ──────────────────────────────
+      let _dashboardTotalEvents = 0;
+      let _dashboardTotalCheckins = 0;
+
+      function renderDashboard() {
+        $('#stat-total-events').textContent = _dashboardTotalEvents;
+        $('#stat-total-attendees').textContent = _dashboardTotalCheckins;
+      }
+
+      // ── Admin: Event List ───────────────────────────────────
+      function renderEventList() {
+        const container = $('#event-list');
+        // Fetch from backend to ensure sync — event IDs must exist in SQLite
+        fetch('/api/events')
+          .then(r => r.json())
+          .then(events => {
+            if (!Array.isArray(events) || events.length === 0) {
+              container.innerHTML = '<p class="text-sm text-gray-400 text-center py-8">No events yet. Create one above.</p>';
+              _dashboardTotalEvents = 0;
+              _dashboardTotalCheckins = 0;
+              renderDashboard();
+              return;
+            }
+
+            // Update dashboard stats from the same API response
+            _dashboardTotalEvents = events.length;
+            _dashboardTotalCheckins = events.reduce((sum, e) => sum + (e.checkins_count || e.attendee_count || 0), 0);
+            renderDashboard();
+
+            // Merge into localStorage cache so basic event metadata is available offline
+            data = loadData();
+            events.forEach(be => {
+              const exists = data.events.find(e => e.id === be.id);
+              if (!exists) {
+                data.events.push({
+                  id: be.id,
+                  name: be.name,
+                  date: be.date,
+                  time: be.time || '',
+                  location: be.location || '',
+                  status: be.status || 'upcoming',
+                  createdAt: Date.now()
+                });
+              } else {
+                exists.name = be.name;
+                exists.date = be.date;
+                exists.time = be.time || '';
+                exists.location = be.location || '';
+                exists.status = be.status || 'upcoming';
+              }
+            });
+            saveData(data);
+
+            container.innerHTML = events.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')).map(ev => {
+              const count = ev.checkins_count || ev.attendee_count || 0;
+              return `
+                <div class="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm hover:shadow-md transition cursor-pointer" onclick="window._viewEvent('${ev.id}')">
+                  <div class="flex items-start justify-between">
+                    <div class="flex-1 min-w-0">
+                      <h4 class="font-bold text-gray-800 truncate">${escapeHtml(ev.name)}</h4>
+                      <div class="flex flex-wrap gap-x-4 gap-y-0.5 mt-1 text-xs text-gray-500">
+                        <span>📅 ${fmtDate(ev.date)}</span>
+                        ${ev.time ? `<span>🕐 ${fmtTime(ev.time)}</span>` : ''}
+                        ${ev.location ? `<span>📍 ${escapeHtml(ev.location)}</span>` : ''}
+                      </div>
+                    </div>
+                    <div class="ml-3 flex flex-col items-center bg-brand-50 rounded-xl px-3 py-2 min-w-[48px]">
+                      <span class="text-xl font-extrabold text-brand-700">${count}</span>
+                      <span class="text-[10px] text-brand-500 font-medium uppercase">Checked in</span>
+                    </div>
+                  </div>
+                </div>
+              `;
+            }).join('');
+          })
+          .catch(() => {
+            container.innerHTML = '<p class="text-sm text-gray-400 text-center py-8">Could not connect to backend. Check that the server is running.</p>';
+          });
+      }
+
+      function escapeHtml(str) {
+        const d = document.createElement('div');
+        d.textContent = str;
+        return d.innerHTML;
+      }
+
+      // ── Admin: Create Event ─────────────────────────────────
+      $('#btn-show-form').addEventListener('click', () => {
+        $('#form-new-event').classList.remove('hidden');
+        $('#btn-show-form').classList.add('hidden');
+        // Set default date to today
+        $('#ev-date').value = new Date().toISOString().slice(0, 10);
+      });
+
+      $('#btn-cancel-form').addEventListener('click', () => {
+        $('#form-new-event').classList.add('hidden');
+        $('#btn-show-form').classList.remove('hidden');
+        $('#form-new-event').reset();
+      });
+
+      $('#form-new-event').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const name = $('#ev-name').value.trim();
+        const date = $('#ev-date').value;
+        const time = $('#ev-time').value;
+        const location = $('#ev-location').value.trim();
+
+        if (!name || !date) { toast('Please fill in Event Name and Date.', 'error'); return; }
+
+        const btn = $('#form-new-event button[type="submit"]');
+        btn.disabled = true;
+        btn.textContent = '⏳ Creating…';
+
+        // POST to backend API so event exists in SQLite (required for register, checkin, etc.)
+        fetch('/api/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, date, time, location })
+        })
+        .then(r => r.json())
+        .then(event => {
+          if (event.error) {
+            toast(event.error, 'error');
+            btn.disabled = false;
+            btn.textContent = 'Save Event';
+            return;
+          }
+          // Sync into localStorage with the backend-generated ID
+          data.events.push({
+            id: event.id,
+            name: event.name,
+            date: event.date,
+            time: event.time,
+            location: event.location,
+            createdAt: Date.now()
+          });
+          saveData(data);
+          renderAll();
+          $('#form-new-event').reset();
+          $('#form-new-event').classList.add('hidden');
+          $('#btn-show-form').classList.remove('hidden');
+          toast(`Event "${name}" created!`);
+        })
+        .catch(err => {
+          toast('Network error — is the backend running?', 'error');
+        })
+        .finally(() => {
+          btn.disabled = false;
+          btn.textContent = 'Save Event';
+        });
+      });
+
+      // ── Admin: View Event Detail ────────────────────────────
+      let currentDetailEventId = null;  // module-level, survives re-renders
+
+      window._viewEvent = function(eventId) {
+        currentDetailEventId = eventId;
+
+        // Fetch from backend to get live registrations, attendees, and status
+        fetch('/api/events/' + encodeURIComponent(eventId))
+          .then(r => r.json())
+          .then(ev => {
+            if (ev.error) {
+              toast('Event not found: ' + ev.error, 'error');
+              switchTab('admin');
+              return;
+            }
+
+            const origin = window.location.origin;
+            const eventStatus = ev.status || 'upcoming';
+            const attendees = ev.attendees || [];
+            const registeredList = ev.registered || [];
+            const hasRegs = registeredList.length > 0;
+            const regCount = registeredList.length;
+
+            // Build the report data from backend response
+            let reportRows = [];
+            if (hasRegs) {
+              reportRows = registeredList.map(r => ({
+                emp_code: r.emp_code,
+                name: r.name || r.emp_code,
+                dept: r.dept || '',
+                phone: r.phone || '',
+                status: r.status === 'attended' ? 'Attended' : 'Absent'
+              })).sort((a, b) => a.name.localeCompare(b.name));
+            } else {
+              reportRows = attendees.map(a => ({
+                emp_code: a.emp_code,
+                name: a.user_name || a.emp_code,
+                dept: a.user_dept || '',
+                status: 'Attended'
+              }));
+            }
+
+        const escapedEventId = ev.id;
+        const escapedEventName = escapeHtml(ev.name);
+        const escapedEventDate = ev.date;
+
+        // Status badge mapping
+        const statusBadge = {
+          upcoming: '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">⏳ Upcoming</span>',
+          live: '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">🟢 Live</span>',
+          closed: '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">🔒 Closed</span>'
+        };
+        const currentBadge = statusBadge[eventStatus] || statusBadge.upcoming;
+
+        // Status button states
+        const statusBtn = (status, label, icon, colorClass) => {
+          const active = eventStatus === status;
+          return `<button onclick="window._setEventStatus('${escapedEventId}','${status}')"
+            class="flex-1 py-2 rounded-lg text-xs font-semibold transition active:scale-95
+            ${active ? 'bg-' + colorClass + '-500 text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}">
+            ${icon} ${label}
+          </button>`;
+        };
+
+        const regCountText = hasRegs
+          ? `<span class="text-emerald-600 font-semibold">${regCount} registered</span>`
+          : '<span class="text-red-500 font-semibold">0 registered — import attendees first</span>';
+
+        // Warning block when 0 registered
+        const noRegsWarning = hasRegs ? '' : `
+          <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
+            ⚠ No attendees registered yet. Use the <strong>Import Attendees</strong> section below to register attendees before generating links or reports.
+          </div>`;
+
+        const html = `
+          <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm space-y-3">
+            <div>
+              <div class="flex items-center justify-between">
+                <h2 class="text-xl font-bold text-gray-800">${escapedEventName}</h2>
+                ${currentBadge}
+              </div>
+              <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-gray-500">
+                <span>📅 ${fmtDate(ev.date)}</span>
+                ${ev.time ? `<span>🕐 ${fmtTime(ev.time)}</span>` : ''}
+                ${ev.location ? `<span>📍 ${escapeHtml(ev.location)}</span>` : ''}
+              </div>
+            </div>
+
+            <!-- Event Status Toggle -->
+            <div class="bg-gray-50 rounded-xl p-3 space-y-1.5">
+              <p class="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Event Status</p>
+              <div class="flex gap-2">
+                ${statusBtn('upcoming', 'Upcoming', '⏳', 'amber')}
+                ${statusBtn('live', 'Live', '🟢', 'emerald')}
+                ${statusBtn('closed', 'Closed', '🔒', 'red')}
+              </div>
+            </div>
+
+            <div class="flex gap-3 pt-2">
+              <div class="bg-brand-50 rounded-xl px-4 py-2 text-center flex-1">
+                <p class="text-2xl font-extrabold text-brand-700">${ev.checkins_count !== undefined ? ev.checkins_count : ev.attendee_count !== undefined ? ev.attendee_count : attendees.length}</p>
+                <p class="text-[10px] text-brand-500 font-medium uppercase">Check-ins</p>
+              </div>
+              <div class="bg-amber-50 rounded-xl px-4 py-2 text-center flex-1">
+                <p class="text-2xl font-extrabold text-amber-700">${new Set(attendees.map(a => a.emp_code)).size}</p>
+                <p class="text-[10px] text-amber-500 font-medium uppercase">Unique</p>
+              </div>
+              <button onclick="window._deleteEvent('${escapedEventId}')"
+                class="bg-red-50 hover:bg-red-100 rounded-xl px-4 py-2 text-center flex-1 transition active:scale-95 border border-red-100">
+                <p class="text-lg font-extrabold text-red-600">🗑</p>
+                <p class="text-[10px] text-red-500 font-medium uppercase">Delete</p>
+              </button>
+            </div>
+          </div>
+
+          ${noRegsWarning}
+
+          <!-- ── 🔗 Event Check-in Link ──────────────────── -->
+          <div class="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm space-y-3">
+            <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">🔗 Event Check-in Link</h3>
+            <p class="text-xs text-gray-400">
+              Share this single link with all attendees. Employees enter their own ID to self-check-in when the event is <strong>Live</strong>.
+              ${!hasRegs ? '<br><span class="text-red-500 font-semibold">Register attendees below first.</span>' : ''}
+            </p>
+            <button id="btn-get-link"
+              class="w-full bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white font-semibold py-2.5 rounded-xl transition text-sm shadow-md shadow-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              ${!hasRegs ? 'disabled' : ''}>
+              🔗 Get Event Check-in Link
+            </button>
+            <div id="link-result" class="hidden space-y-2">
+              <div class="flex gap-2">
+                <input type="text" id="checkin-link-input" readonly
+                  class="flex-1 border border-gray-300 rounded-xl px-3 py-2 text-xs font-mono bg-gray-50 text-gray-700 focus:ring-2 focus:ring-brand-400 outline-none" />
+                <button id="btn-copy-link"
+                  class="bg-gray-100 hover:bg-gray-200 active:scale-[0.98] text-gray-700 font-semibold py-2 px-4 rounded-xl transition text-xs">
+                  📋 Copy
+                </button>
+              </div>
+            </div>
+            <p id="link-msg" class="text-xs text-gray-400 hidden"></p>
+          </div>
+
+          <!-- ── 📥 Import Attendees ────────────────────── -->
+          <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div class="p-4 border-b border-gray-100">
+              <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">📥 Import Attendees</h3>
+              <p class="text-xs text-gray-400 mt-1">Register attendees for this event. ${regCountText}.</p>
+            </div>
+            <!-- Tabs -->
+            <div class="flex bg-gray-100 p-1 mx-3 mt-3 rounded-xl">
+              <button id="ev-import-tab-paste"
+                class="ev-import-tab flex-1 text-xs font-semibold py-2 rounded-lg transition bg-white text-brand-700 shadow-sm">Paste IDs</button>
+              <button id="ev-import-tab-csv"
+                class="ev-import-tab flex-1 text-xs font-semibold py-2 rounded-lg transition text-gray-500">Upload CSV</button>
+            </div>
+            <!-- Paste -->
+            <div id="ev-import-paste" class="p-3 space-y-2">
+              <textarea id="ev-import-textarea" rows="5"
+                placeholder="One per line:&#10;FPB001, Alice Johnson, Engineering, 09123456789&#10;FPB002, Bob Martinez, HR, 09987654321"
+                class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm font-mono focus:ring-2 focus:ring-brand-400 focus:border-brand-400 outline-none transition resize-y"></textarea>
+              <p class="text-[11px] text-gray-400">Format: <code class="bg-gray-100 px-1.5 py-0.5 rounded text-brand-600">EMP_CODE, Name, Dept, Phone</code>. Phone must start with <code class="bg-gray-100 px-1.5 py-0.5 rounded text-brand-600">09</code>, no spaces.</p>
+            </div>
+            <!-- CSV -->
+            <div id="ev-import-csv" class="hidden p-3 space-y-3">
+              <label class="flex flex-col items-center gap-2 p-6 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-brand-400 transition bg-gray-50">
+                <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+                <span class="text-sm text-gray-600 font-medium">Click to upload CSV</span>
+                <span class="text-xs text-gray-400" id="ev-csv-filename">.csv with columns: EMP_CODE, Name, Department, Phone</span>
+                <input type="file" id="ev-import-csv-input" accept=".csv,.txt" class="hidden" />
+              </label>
+              <button id="ev-btn-download-template" type="button"
+                class="w-full border border-brand-300 text-brand-600 font-semibold py-2.5 rounded-xl hover:bg-brand-50 active:scale-[0.98] transition text-sm">
+                ⬇ Download CSV Template
+              </button>
+            </div>
+            <!-- Preview + Register -->
+            <div class="border-t border-gray-100 px-3 pt-3 pb-3">
+              <div class="flex items-center justify-between mb-2">
+                <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Preview List</h4>
+                <button id="ev-btn-clear-preview" class="hidden text-[10px] text-red-500 font-semibold hover:text-red-700 transition">Clear</button>
+              </div>
+              <div id="ev-preview-list" class="max-h-48 overflow-y-auto mb-3">
+                <p class="text-xs text-gray-400 text-center py-6">Paste IDs or upload a CSV to preview.</p>
+              </div>
+              <button id="ev-btn-register" disabled
+                class="w-full bg-brand-600 hover:bg-brand-700 active:scale-[0.98] disabled:bg-gray-300 disabled:cursor-not-allowed disabled:shadow-none text-white font-semibold py-2.5 rounded-xl transition text-sm shadow-md shadow-brand-200">
+                Register Attendees
+              </button>
+              <p id="ev-register-status" class="text-xs text-gray-400 mt-2 hidden"></p>
+            </div>
+          </div>
+
+          <!-- ── 📱 Generate QR Codes ───────────────────── -->
+          <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 space-y-3">
+            <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">📱 Generate QR Codes</h3>
+            <p class="text-xs text-gray-400">Generate QR codes from the registered attendee list for this event.</p>
+            <button id="ev-btn-generate-qr"
+              class="w-full bg-brand-600 hover:bg-brand-700 active:scale-[0.98] disabled:bg-gray-300 disabled:cursor-not-allowed disabled:shadow-none text-white font-semibold py-3 rounded-xl transition text-sm shadow-md shadow-brand-200"
+              ${!hasRegs ? 'disabled' : ''}>
+              ${hasRegs ? `Generate QR Codes (${regCount} attendee${regCount > 1 ? 's' : ''})` : 'No registered attendees'}
+            </button>
+            <div class="flex items-center gap-2 min-h-[24px]">
+              <p class="text-xs text-gray-400" id="ev-qr-count-label">No QR codes generated yet.</p>
+              <button id="ev-btn-clear-qr" class="hidden text-[10px] text-red-500 font-semibold hover:text-red-700 transition ml-auto">Clear QR List</button>
+              <button id="ev-btn-print-qr" class="hidden text-[10px] text-brand-600 font-semibold hover:text-brand-700 transition">🖨 Print</button>
+            </div>
+            <div id="ev-qr-code-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <p class="text-xs text-gray-400 col-span-full text-center py-8">Click "Generate QR Codes" to create QR codes from registered attendees.</p>
+            </div>
+          </div>
+
+          <!-- ── 📋 Attendance Report ───────────────────── -->
+          <div class="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm space-y-3">
+            <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">📋 Attendance Report</h3>
+            ${!hasRegs ? '<p class="text-xs text-amber-600 font-semibold">⚠ Register attendees before generating reports.</p>' : ''}
+            <div class="flex gap-2">
+              <button id="btn-download-csv"
+                class="flex-1 bg-gray-100 hover:bg-gray-200 active:scale-[0.98] text-gray-700 font-semibold py-2.5 rounded-xl transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                ${!hasRegs ? 'disabled' : ''}>
+                ⬇ Download CSV
+              </button>
+            </div>
+            <div class="flex gap-2 items-stretch">
+              <input type="email" id="email-report-input" placeholder="recipient@example.com"
+                class="flex-1 border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-brand-400 focus:border-brand-400 outline-none transition" />
+              <button id="btn-send-email"
+                class="bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white font-semibold py-2.5 px-4 rounded-xl transition text-sm shadow-md shadow-brand-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                ${!hasRegs ? 'disabled' : ''}>
+                ✉ Send
+              </button>
+            </div>
+            <p id="email-status" class="text-xs text-gray-400 hidden"></p>
+          </div>
+
+          <div class="mt-5">
+            <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+              Attendees (${attendees.length})
+            </h3>
+            ${attendees.length === 0 ? '<p class="text-sm text-gray-400 text-center py-8">No attendees checked in yet.</p>' : `
+              <div class="space-y-2">
+                ${attendees.map((a) => `
+                    <div class="bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-center justify-between shadow-sm">
+                      <div>
+                        <p class="font-semibold text-gray-800 text-sm">${escapeHtml(a.user_name || a.emp_code)}</p>
+                        <p class="text-xs text-gray-400">${a.user_dept ? a.user_dept + ' · ' : ''}${a.emp_code} · ${a.checkin_method === 'qr' ? '📷 QR' : a.checkin_method === 'self' ? '🔗 Self' : '⌨ Manual'}</p>
+                      </div>
+                      <span class="text-xs text-gray-400">${a.timestamp ? new Date(a.timestamp).toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit'}) : ''}</span>
+                    </div>
+                  `).join('')}
+              </div>
+            `}
+          </div>
+        `;
+
+        $('#event-detail-content').innerHTML = html;
+        switchTab('detail');
+
+        // Save for QR generation handlers to reference
+        window._detailRegistrations = registeredList;
+
+        // ── Wire up Event Status buttons ──────────────────
+        window._setEventStatus = function(id, status) {
+          fetch(`/api/events/${id}/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status })
+          })
+          .then(r => r.json())
+          .then(resp => {
+            if (resp.event_name) {
+              const ev2 = data.events.find(e => e.id === id);
+              if (ev2) ev2.status = status;
+              saveData(data);
+              toast(`Event status set to "${status}"!`);
+              window._viewEvent(id);
+            } else {
+              toast(resp.error || 'Failed to update status', 'error');
+            }
+          })
+          .catch(err => {
+            toast('Network error. Is the backend running?', 'error');
+          });
+        };
+
+        // ── Wire up Get Event Check-in Link ───────────────
+        document.getElementById('btn-get-link').addEventListener('click', () => {
+          const linkUrl = `${origin}/self-checkin?event_id=${encodeURIComponent(escapedEventId)}`;
+          document.getElementById('checkin-link-input').value = linkUrl;
+          document.getElementById('link-result').classList.remove('hidden');
+        });
+
+        document.getElementById('btn-copy-link').addEventListener('click', () => {
+          const input = document.getElementById('checkin-link-input');
+          input.select();
+          input.setSelectionRange(0, 99999);
+          navigator.clipboard.writeText(input.value).then(() => {
+            toast('Check-in link copied to clipboard!');
+          }).catch(() => {
+            toast('Press Ctrl+C to copy the link.', 'info');
+          });
+        });
+
+        // ── Wire up Import Tabs ──────────────────────────
+        let evImportTab = 'paste';
+        document.querySelectorAll('.ev-import-tab').forEach(btn => {
+          btn.addEventListener('click', () => {
+            evImportTab = btn.id === 'ev-import-tab-paste' ? 'paste' : 'csv';
+            document.querySelectorAll('.ev-import-tab').forEach(b => {
+              b.classList.toggle('bg-white', b.id === btn.id);
+              b.classList.toggle('text-brand-700', b.id === btn.id);
+              b.classList.toggle('shadow-sm', b.id === btn.id);
+              b.classList.toggle('text-gray-500', b.id !== btn.id);
+            });
+            document.getElementById('ev-import-paste').classList.toggle('hidden', evImportTab !== 'paste');
+            document.getElementById('ev-import-csv').classList.toggle('hidden', evImportTab !== 'csv');
+          });
+        });
+
+        // ── Wire up Import — Paste ───────────────────────
+        let evPreviewData = [];
+        let evRejectedRows = [];
+
+        function evParseImport(text) {
+          evRejectedRows = [];
+          // Normalize all line endings to \n, then split
+          const normalized = text.replace(/\r\n?/g, '\n');
+          const lines = normalized.split('\n');
+          return lines.reduce((valid, line) => {
+            // Trim and strip any remaining \r control chars from the whole line
+            const cleanLine = line.replace(/\r/g, '').trim();
+            if (cleanLine.length === 0) return valid;  // skip empty rows
+
+            // Split by comma, clean each cell
+            const parts = cleanLine.split(',').map(s => s.replace(/\r/g, '').trim());
+            const emp_code = parts[0] || '';
+            const name     = parts[1] || '';
+            const dept     = parts[2] || '';
+            const phoneRaw = parts[3] || '';
+
+            // Skip header row and rows with empty emp_code
+            if (!emp_code) return valid;
+            if (emp_code.toLowerCase() === 'emp_code') return valid;
+
+            // Strict phone validation (phone is optional — only validate if present)
+            const phone = phoneRaw;
+            if (phone) {
+              if (phone.includes(' ')) {
+                evRejectedRows.push({ emp_code, name, dept, phone, error: `Phone "${phone}" must not contain spaces.` });
+                return valid;
+              }
+              if (!phone.startsWith('09')) {
+                evRejectedRows.push({ emp_code, name, dept, phone, error: `Phone "${phone}" must start with '09'.` });
+                return valid;
+              }
+            }
+            valid.push({ emp_code, name, dept, phone });
+            return valid;
+          }, []);
+        }
+
+        function evRenderPreview() {
+          const container = document.getElementById('ev-preview-list');
+          const btnClear = document.getElementById('ev-btn-clear-preview');
+          const btnRegister = document.getElementById('ev-btn-register');
+          if (evPreviewData.length === 0 && evRejectedRows.length === 0) {
+            container.innerHTML = '<p class="text-xs text-gray-400 text-center py-6">Paste IDs or upload a CSV to preview.</p>';
+            btnClear.classList.add('hidden');
+            btnRegister.disabled = true;
+            btnRegister.textContent = 'Register Attendees';
+            return;
+          }
+          btnClear.classList.remove('hidden');
+          btnRegister.disabled = evPreviewData.length === 0;
+          btnRegister.textContent = evPreviewData.length > 0
+            ? `Register ${evPreviewData.length} Attendee${evPreviewData.length > 1 ? 's' : ''}`
+            : 'Register Attendees';
+          let h = '';
+          if (evPreviewData.length > 0) {
+            h += `<p class="text-xs text-emerald-600 font-semibold mb-1.5">✓ ${evPreviewData.length} valid</p>
+              <table class="w-full text-xs mb-2"><thead><tr class="text-gray-400 border-b border-gray-100">
+                <th class="text-left py-1.5 font-semibold w-6">#</th><th class="text-left py-1.5 font-semibold">ID</th>
+                <th class="text-left py-1.5 font-semibold">Name</th><th class="text-left py-1.5 font-semibold">Phone</th>
+              </tr></thead><tbody>${evPreviewData.map((p,i) => `
+                <tr class="border-b border-gray-50 hover:bg-gray-50">
+                  <td class="py-1.5 text-gray-400">${i+1}</td>
+                  <td class="py-1.5 font-mono font-semibold text-gray-700">${escapeHtml(p.emp_code)}</td>
+                  <td class="py-1.5 text-gray-600">${escapeHtml(p.name||'—')}</td>
+                  <td class="py-1.5 text-gray-500 font-mono">${escapeHtml(p.phone||'—')}</td>
+                </tr>`).join('')}</tbody></table>`;
+          }
+          if (evRejectedRows.length > 0) {
+            h += `<p class="text-xs text-red-500 font-semibold mb-1.5">✗ ${evRejectedRows.length} rejected</p>
+              <table class="w-full text-xs"><thead><tr class="text-red-300 border-b border-red-50">
+                <th class="text-left py-1.5 font-semibold">ID</th><th class="text-left py-1.5 font-semibold">Reason</th>
+              </tr></thead><tbody>${evRejectedRows.map(r => `
+                <tr class="border-b border-red-50 bg-red-50/50">
+                  <td class="py-1.5 font-mono text-red-700">${escapeHtml(r.emp_code)}</td>
+                  <td class="py-1.5 text-red-500 text-[10px]">${escapeHtml(r.error)}</td>
+                </tr>`).join('')}</tbody></table>`;
+          }
+          container.innerHTML = h;
+        }
+
+        document.getElementById('ev-import-textarea').addEventListener('input', () => {
+          evPreviewData = evParseImport(document.getElementById('ev-import-textarea').value);
+          evRenderPreview();
+        });
+
+        document.getElementById('ev-import-csv-input').addEventListener('change', (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          document.getElementById('ev-csv-filename').textContent = file.name;
+          const reader = new FileReader();
+          reader.onload = (ev2) => {
+            evPreviewData = evParseImport(ev2.target.result);
+            evRenderPreview();
+          };
+          reader.readAsText(file);
+        });
+
+        document.getElementById('ev-btn-download-template').addEventListener('click', () => {
+          const csv = 'emp_code,name,dept,phone\\n';
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = 'attendee_template.csv';
+          document.body.appendChild(a); a.click(); document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          toast('CSV template downloaded!');
+        });
+
+        document.getElementById('ev-btn-clear-preview').addEventListener('click', () => {
+          evPreviewData = []; evRejectedRows = [];
+          document.getElementById('ev-import-textarea').value = '';
+          document.getElementById('ev-import-csv-input').value = '';
+          document.getElementById('ev-csv-filename').textContent = '.csv with columns: EMP_CODE, Name, Department, Phone';
+          evRenderPreview();
+          document.getElementById('ev-register-status').classList.add('hidden');
+        });
+
+        // ── Wire up Register Attendees ────────────────────
+        document.getElementById('ev-btn-register').addEventListener('click', () => {
+          const btn = document.getElementById('ev-btn-register');
+          const statusEl = document.getElementById('ev-register-status');
+          const eventId = currentDetailEventId;
+          if (!eventId) {
+            toast('No event selected. Please navigate back and re-open the event.', 'error');
+            return;
+          }
+          btn.disabled = true;
+          btn.textContent = '⏳ Registering…';
+          statusEl.classList.add('hidden');
+
+          const url = '/api/events/' + encodeURIComponent(eventId) + '/register';
+          console.log('Uploading to URL:', url, '| eventId:', eventId, '| attendees:', evPreviewData.length);
+          fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ attendees: evPreviewData })
+          })
+          .then(r => r.json())
+          .then(resp => {
+            if (resp.status === 'ok') {
+              let msg = `✅ ${resp.inserted} registered`;
+              if (resp.skipped) msg += `, ${resp.skipped} skipped (duplicates)`;
+              if (resp.rejected && resp.rejected.length) msg += `, ${resp.rejected.length} rejected`;
+              statusEl.textContent = msg;
+              statusEl.className = 'text-xs text-emerald-600 font-semibold mt-2';
+              statusEl.classList.remove('hidden');
+              toast(`${resp.inserted} attendee(s) registered!`);
+              // Refresh event detail
+              setTimeout(() => window._viewEvent(eventId), 800);
+            } else {
+              statusEl.textContent = resp.error || 'Registration failed.';
+              statusEl.className = 'text-xs text-red-500 font-semibold mt-2';
+              statusEl.classList.remove('hidden');
+              btn.disabled = false;
+              btn.textContent = 'Register Attendees';
+            }
+          })
+          .catch(err => {
+            statusEl.textContent = 'Network error. Is the backend running?';
+            statusEl.className = 'text-xs text-red-500 font-semibold mt-2';
+            statusEl.classList.remove('hidden');
+            btn.disabled = false;
+            btn.textContent = 'Register Attendees';
+          });
+        });
+
+        // ── Shared QR rendering function (called on load + button click) ──
+        function evRenderQRs(list, showToast) {
+          const grid = document.getElementById('ev-qr-code-grid');
+          grid.innerHTML = '';
+          if (!list || list.length === 0) {
+            grid.innerHTML = '<p class="text-xs text-gray-400 col-span-full text-center py-8">No registered attendees. Import attendees first.</p>';
+            return;
+          }
+          list.forEach((reg, idx) => {
+            const card = document.createElement('div');
+            card.className = 'bg-white rounded-xl border border-gray-200 p-3 text-center shadow-sm';
+            card.innerHTML = `
+              <div class="ev-qr-gen-${idx} flex justify-center mb-2"></div>
+              <p class="text-xs font-bold text-gray-800 truncate">${escapeHtml(reg.name || reg.emp_code)}</p>
+              <p class="text-[10px] text-gray-400 font-mono">${escapeHtml(reg.emp_code)}</p>
+              ${reg.dept ? `<p class="text-[10px] text-gray-400">${escapeHtml(reg.dept)}</p>` : ''}
+            `;
+            grid.appendChild(card);
+            new QRCode(card.querySelector('.ev-qr-gen-' + idx), {
+              text: reg.emp_code,
+              width: 100, height: 100,
+              colorDark: '#4f46e5', colorLight: '#ffffff',
+              correctLevel: QRCode.CorrectLevel.M
+            });
+          });
+          document.getElementById('ev-qr-count-label').textContent = `${list.length} QR code${list.length > 1 ? 's' : ''} generated.`;
+          document.getElementById('ev-btn-clear-qr').classList.remove('hidden');
+          document.getElementById('ev-btn-print-qr').classList.remove('hidden');
+          if (showToast) toast(`${list.length} QR code(s) generated!`);
+        }
+
+        // ── Wire up Generate QR Codes ─────────────────────
+        document.getElementById('ev-btn-generate-qr').addEventListener('click', () => {
+          evRenderQRs(window._detailRegistrations || [], true);
+        });
+
+        document.getElementById('ev-btn-clear-qr').addEventListener('click', () => {
+          const grid = document.getElementById('ev-qr-code-grid');
+          grid.innerHTML = '<p class="text-xs text-gray-400 col-span-full text-center py-8">Click "Generate QR Codes" to create QR codes from registered attendees.</p>';
+          document.getElementById('ev-qr-count-label').textContent = 'No QR codes generated yet.';
+          document.getElementById('ev-btn-clear-qr').classList.add('hidden');
+          document.getElementById('ev-btn-print-qr').classList.add('hidden');
+        });
+
+        document.getElementById('ev-btn-print-qr').addEventListener('click', () => {
+          const registeredList = window._detailRegistrations || [];
+          if (registeredList.length === 0) return;
+          const sheet = document.createElement('div');
+          sheet.id = 'print-sheet-ev';
+          sheet.style.cssText = 'position:fixed;left:0;top:0;width:100%;z-index:99999;background:#fff;padding:30px;min-height:100vh;';
+          sheet.innerHTML = `
+            <style>
+              @media screen { #print-sheet-ev { display:block!important;overflow-y:auto; } body>*:not(#print-sheet-ev) { display:none!important; } }
+              @media print { body * { visibility:hidden; } #print-sheet-ev,#print-sheet-ev * { visibility:visible; } #print-sheet-ev { position:absolute;left:0;top:0;width:100%;background:#fff; } .qr-card-ev { page-break-after:always;break-after:page; } .qr-card-ev:last-child { page-break-after:auto;break-after:auto; } }
+              .qr-card-ev { display:inline-flex;flex-direction:column;align-items:center;width:170px;padding:14px;margin:10px;border:2px dashed #ccc;border-radius:12px;text-align:center;font-family:sans-serif;vertical-align:top; }
+              .qr-card-ev canvas { display:block;margin:0 auto 8px; }
+            </style>
+            <h2 style="font-family:sans-serif;font-size:22px;margin:0 0 8px 10px;color:#333;">📋 Attendee QR Codes</h2>
+            <p style="font-family:sans-serif;font-size:13px;color:#666;margin:0 0 18px 10px;">${escapedEventName}</p>
+            <div id="ev-print-grid"></div>
+          `;
+          document.body.appendChild(sheet);
+          const printGrid = sheet.querySelector('#ev-print-grid');
+          registeredList.forEach((reg, idx) => {
+            const card = document.createElement('div');
+            card.className = 'qr-card-ev';
+            card.innerHTML = `
+              <div class="ev-qr-print-${idx}"></div>
+              <p style="font-size:13px;font-weight:bold;margin:4px 0 0;color:#1f2937;">${escapeHtml(reg.name || reg.emp_code)}</p>
+              <p style="font-size:11px;color:#6b7280;margin:2px 0 0;">ID: ${escapeHtml(reg.emp_code)}</p>
+              ${reg.dept ? `<p style="font-size:10px;color:#9ca3af;margin:2px 0 0;">${escapeHtml(reg.dept)}</p>` : ''}
+            `;
+            printGrid.appendChild(card);
+            new QRCode(card.querySelector('.ev-qr-print-' + idx), {
+              text: reg.emp_code, width: 120, height: 120,
+              colorDark: '#000000', colorLight: '#ffffff',
+              correctLevel: QRCode.CorrectLevel.M
+            });
+          });
+          requestAnimationFrame(() => {
+            window.print();
+            setTimeout(() => { if (sheet.parentElement) sheet.parentElement.removeChild(sheet); }, 600);
+          });
+        });
+
+        // ── Wire up Download CSV ────────────────────────────
+        document.getElementById('btn-download-csv').addEventListener('click', () => {
+          window._downloadReportCsv(escapedEventName, escapedEventDate, reportRows);
+        });
+
+        // ── Wire up Send to Email ───────────────────────────
+        document.getElementById('btn-send-email').addEventListener('click', () => {
+          const email = document.getElementById('email-report-input').value.trim();
+          if (!email) {
+            toast('Please enter an email address.', 'error');
+            return;
+          }
+          window._sendReportEmail(escapedEventId, email);
+        });
+
+        // Auto-generate QR codes if there are registered attendees
+        if (registeredList.length > 0) {
+          // Small delay to ensure DOM is fully painted before QR rendering
+          setTimeout(() => evRenderQRs(registeredList, false), 100);
+        }
+          })
+          .catch(() => {
+            toast('Could not load event details. Is the backend running?', 'error');
+          });
+      };
+
+      // ── Download CSV ─────────────────────────────────────────
+      window._downloadReportCsv = function(eventName, eventDate, rows) {
+        // Build CSV content
+        let csv = 'Employee ID,Name,Department,Status\n';
+        rows.forEach(r => {
+          csv += `${r.emp_code},"${r.name}","${r.dept}",${r.status}\n`;
+        });
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const safeName = eventName.replace(/[^a-zA-Z0-9]/g, '_');
+        a.download = `attendance_${safeName}_${eventDate}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast('CSV downloaded!');
+      };
+
+      // ── Send Email Report ────────────────────────────────────
+      window._sendReportEmail = function(eventId, email) {
+        const btn = document.getElementById('btn-send-email');
+        const statusEl = document.getElementById('email-status');
+        btn.disabled = true;
+        btn.textContent = '⏳ Sending…';
+        statusEl.classList.remove('hidden');
+        statusEl.textContent = 'Sending…';
+        statusEl.className = 'text-xs text-gray-400';
+
+        fetch(`/api/events/${eventId}/report/email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        })
+        .then(r => r.json())
+        .then(resp => {
+          if (resp.status === 'sent') {
+            statusEl.textContent = `✅ Report sent to ${resp.to} (${resp.records} records).`;
+            statusEl.className = 'text-xs text-emerald-600 font-semibold';
+            toast('Report emailed!');
+          } else {
+            statusEl.textContent = `❌ ${resp.message || resp.error || 'Send failed'}`;
+            statusEl.className = 'text-xs text-red-500 font-semibold';
+            toast(resp.message || resp.error || 'Email send failed.', 'error');
+          }
+        })
+        .catch(err => {
+          statusEl.textContent = '❌ Network error. Is the backend running?';
+          statusEl.className = 'text-xs text-red-500 font-semibold';
+          toast('Network error.', 'error');
+        })
+        .finally(() => {
+          btn.disabled = false;
+          btn.textContent = '✉ Send';
+        });
+      };
+
+      // ── Reports Tab: Populate Event Select ──────────────────
+      function populateReportEventSelect() {
+        data = loadData();
+        const sel = $('#report-event-select');
+        const currentVal = sel.value;
+        sel.innerHTML = '<option value="">-- Choose an event --</option>' +
+          data.events.sort((a,b) => b.createdAt - a.createdAt).map(ev =>
+            `<option value="${ev.id}">${escapeHtml(ev.name)} — ${fmtDate(ev.date)}</option>`
+          ).join('');
+        if (currentVal && data.events.some(e => e.id === currentVal)) {
+          sel.value = currentVal;
+        }
+        updateReportSendButton();
+      }
+
+      // Enable/disable the Send button based on selections
+      function updateReportSendButton() {
+        const eventId = $('#report-event-select').value;
+        const email = $('#report-email-input').value.trim();
+        $('#btn-report-send').disabled = !(eventId && email);
+      }
+
+      $('#report-event-select').addEventListener('change', updateReportSendButton);
+      $('#report-email-input').addEventListener('input', updateReportSendButton);
+
+      // Keep a session log of sent reports
+      let reportHistoryLog = [];
+
+      function renderReportHistory() {
+        const container = $('#report-history');
+        if (reportHistoryLog.length === 0) {
+          container.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">No reports sent yet this session.</p>';
+          return;
+        }
+        container.innerHTML = reportHistoryLog.slice(0, 10).map(r => `
+          <div class="flex items-center justify-between bg-white rounded-xl border border-gray-100 px-4 py-2.5 shadow-sm">
+            <div>
+              <p class="font-semibold text-xs text-gray-800">${escapeHtml(r.eventName)}</p>
+              <p class="text-[10px] text-gray-400">Sent to ${escapeHtml(r.email)} · ${r.records} records · ${new Date(r.timestamp).toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit'})}</p>
+            </div>
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${r.success ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}">
+              ${r.success ? '✓ SENT' : '✗ FAILED'}
+            </span>
+          </div>
+        `).join('');
+      }
+
+      // ── Reports Tab: Send Email ────────────────────────────────
+      $('#btn-report-send').addEventListener('click', () => {
+        const eventId = $('#report-event-select').value;
+        const email = $('#report-email-input').value.trim();
+        if (!eventId || !email) return;
+
+        const btn = $('#btn-report-send');
+        const btnText = $('#report-btn-text');
+        const btnSpinner = $('#report-btn-spinner');
+        const statusBox = $('#report-status');
+        const statusText = $('#report-status-text');
+        const statusDetail = $('#report-status-detail');
+
+        btn.disabled = true;
+        btnText.textContent = 'Sending…';
+        btnSpinner.classList.remove('hidden');
+        statusBox.classList.add('hidden');
+
+        fetch(`/api/events/${eventId}/report/email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        })
+        .then(r => r.json())
+        .then(resp => {
+          const eventName = $('#report-event-select option:checked').textContent;
+          statusBox.classList.remove('hidden');
+
+          if (resp.status === 'sent') {
+            statusBox.className = 'rounded-xl p-3 text-sm bg-emerald-50 border border-emerald-200';
+            statusText.textContent = `✅ Report sent to ${resp.to}`;
+            statusText.className = 'font-semibold text-emerald-700';
+            statusDetail.textContent = `${resp.event} — ${resp.records} records · CSV attached`;
+            statusDetail.className = 'text-xs text-emerald-600 mt-0.5';
+
+            // Log in history
+            reportHistoryLog.unshift({
+              eventName: resp.event,
+              eventId: eventId,
+              email: resp.to,
+              records: resp.records,
+              success: true,
+              timestamp: Date.now()
+            });
+            renderReportHistory();
+            toast('Report emailed! 📧');
+          } else {
+            statusBox.className = 'rounded-xl p-3 text-sm bg-red-50 border border-red-200';
+            statusText.textContent = `❌ Send failed`;
+            statusText.className = 'font-semibold text-red-700';
+            statusDetail.textContent = resp.message || resp.error || 'Unknown error. Check SMTP credentials in .env.';
+            statusDetail.className = 'text-xs text-red-600 mt-0.5';
+
+            reportHistoryLog.unshift({
+              eventName: $('#report-event-select option:checked').textContent || eventId,
+              eventId: eventId,
+              email: email,
+              records: 0,
+              success: false,
+              timestamp: Date.now()
+            });
+            renderReportHistory();
+            toast(resp.message || 'Email send failed.', 'error');
+          }
+        })
+        .catch(err => {
+          statusBox.classList.remove('hidden');
+          statusBox.className = 'rounded-xl p-3 text-sm bg-red-50 border border-red-200';
+          statusText.textContent = '❌ Network error';
+          statusText.className = 'font-semibold text-red-700';
+          statusDetail.textContent = 'Is the backend running? Check http://localhost:5000/api/health';
+          statusDetail.className = 'text-xs text-red-600 mt-0.5';
+          toast('Network error.', 'error');
+        })
+        .finally(() => {
+          btn.disabled = false;
+          btnText.textContent = '✉ Send Email Report';
+          btnSpinner.classList.add('hidden');
+        });
+      });
+
+      window._deleteEvent = function(eventId) {
+        if (!confirm('Delete this event and all its attendance records? This cannot be undone.')) return;
+        fetch('/api/events/' + encodeURIComponent(eventId), { method: 'DELETE' })
+          .then(r => r.json())
+          .then(resp => {
+            data = loadData();
+            data.events = data.events.filter(e => e.id !== eventId);
+            data.attendees = data.attendees.filter(a => a.eventId !== eventId);
+            saveData(data);
+            renderAll();
+            switchTab('admin');
+            toast('Event deleted.');
+          })
+          .catch(() => {
+            toast('Failed to delete event. Is the backend running?', 'error');
+          });
+      };
+
+      $('#btn-back-to-admin').addEventListener('click', () => {
+        switchTab('admin');
+      });
+
+      // ── Scanner: Populate Event Select ──────────────────────
+      function populateEventSelect() {
+        const sel = $('#scan-event-select');
+        const currentVal = sel.value;
+        // Fetch from backend and filter to only live events
+        fetch('/api/events')
+          .then(r => r.json())
+          .then(events => {
+            if (!Array.isArray(events)) events = [];
+            const liveEvents = events.filter(e => e.status === 'live');
+            sel.innerHTML = '<option value="">-- Select an event --</option>' +
+              liveEvents.sort((a,b) => (b.created_at || '').localeCompare(a.created_at || '')).map(ev =>
+                `<option value="${ev.id}">${escapeHtml(ev.name)} (${fmtDate(ev.date)})</option>`
+              ).join('');
+            if (!liveEvents.length) {
+              sel.innerHTML += '<option disabled class="text-gray-400">— No live events —</option>';
+            }
+            if (currentVal && liveEvents.some(e => e.id === currentVal)) {
+              sel.value = currentVal;
+            }
+          })
+          .catch(() => {
+            sel.innerHTML = '<option value="">-- Error loading events --</option>';
+          });
+      }
+
+      // ── Scanner: QR Reader ──────────────────────────────────
+      let html5QrCode = null;
+      let scannerActive = false;
+
+      async function startScanner() {
+        const eventId = $('#scan-event-select').value;
+        if (!eventId) { toast('Please select an event first.', 'error'); return; }
+
+        if (html5QrCode === null) {
+          html5QrCode = new Html5Qrcode("qr-reader");
+        }
+
+        try {
+          $('#qr-placeholder').classList.add('hidden');
+          $('#btn-start-scan').classList.add('hidden');
+          $('#btn-stop-scan').classList.remove('hidden');
+
+          await html5QrCode.start(
+            { facingMode: "environment" }, // rear camera
+            {
+              fps: 10,
+              qrbox: { width: 220, height: 220 },
+              aspectRatio: 1.0
+            },
+            (decodedText) => {
+              // On successful scan
+              handleQRScan(decodedText);
+            },
+            () => {} // ignore non-matches
+          );
+          scannerActive = true;
+          $('#online-badge').classList.remove('hidden');
+        } catch (err) {
+          console.error('QR scanner error:', err);
+          $('#qr-placeholder').classList.remove('hidden');
+          $('#btn-start-scan').classList.remove('hidden');
+          $('#btn-stop-scan').classList.add('hidden');
+          toast('Camera access denied or unavailable. Try manual check-in.', 'error');
+        }
+      }
+
+      async function stopScanner() {
+        if (html5QrCode && scannerActive) {
+          try {
+            await html5QrCode.stop();
+          } catch(e) { /* ignore */ }
+          html5QrCode.clear();
+          scannerActive = false;
+        }
+        $('#qr-placeholder').classList.remove('hidden');
+        $('#btn-start-scan').classList.remove('hidden');
+        $('#btn-stop-scan').classList.add('hidden');
+        $('#online-badge').classList.add('hidden');
+      }
+
+      $('#btn-start-scan').addEventListener('click', startScanner);
+      $('#btn-stop-scan').addEventListener('click', stopScanner);
+
+      // Handle QR scan result
+      function handleQRScan(decodedText) {
+        // QR code contains a user ID (e.g. "U001") or PIN (e.g. "1001")
+        const eventId = $('#scan-event-select').value;
+        const text = decodedText.trim();
+        processCheckin(eventId, text, 'qr');
+      }
+
+      // ── Scanner: Manual Check-in ────────────────────────────
+      $('#form-manual-checkin').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const eventId = $('#scan-event-select').value;
+        const pin = $('#input-pin').value.trim();
+        if (!eventId) { toast('Please select an event first.', 'error'); return; }
+        if (!pin) { toast('Please enter an ID or PIN.', 'error'); return; }
+        processCheckin(eventId, pin, 'manual');
+        $('#input-pin').value = '';
+      });
+
+      // ── Core: Process Check-in ──────────────────────────────
+      function processCheckin(eventId, input, method) {
+        const code = input.trim();
+
+        // POST to backend — backend handles registration gating,
+        // duplicate detection, and writes to the attendance table.
+        fetch('/api/checkin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            emp_code: code,
+            checkin_method: method,
+            event_id: eventId,
+            timestamp: new Date().toISOString()
+          })
+        })
+        .then(r => r.json())
+        .then(resp => {
+          if (resp.event_name) {
+            // Success — backend returned the checkin record
+            const user = {
+              id: resp.emp_code,
+              name: resp.user_name || code,
+              dept: resp.user_dept || ''
+            };
+
+            // Sync to localStorage so the scanner's recent list updates
+            data = loadData();
+            if (!data.attendees) data.attendees = [];
+            data.attendees.push({
+              id: resp.id,
+              eventId: resp.event_id,
+              userId: resp.emp_code,
+              userName: resp.user_name || code,
+              method: resp.checkin_method,
+              timestamp: new Date(resp.timestamp).getTime()
+            });
+            // Update registration status
+            if (!data.registrations) data.registrations = [];
+            const regEntry = data.registrations.find(
+              r => r.eventId === eventId && r.userId === resp.emp_code
+            );
+            if (regEntry) regEntry.status = 'attended';
+            saveData(data);
+
+            showScanResult(user, code, method, true, false, false);
+            toast(`${resp.user_name || code} checked in successfully! ✓`, 'success');
+            renderRecentCheckins();
+
+            // Refresh dashboard stats from backend so check-in count is always current
+            fetch('/api/events')
+              .then(r => r.json())
+              .then(events => {
+                if (Array.isArray(events)) {
+                  _dashboardTotalEvents = events.length;
+                  _dashboardTotalCheckins = events.reduce((sum, e) => sum + (e.checkins_count || e.attendee_count || 0), 0);
+                  renderDashboard();
+                }
+              })
+              .catch(() => {});
+          } else if (resp.error === 'duplicate') {
+            const user = resp.user || { id: code, name: code, dept: '' };
+            showScanResult(user, code, method, true, true, false);
+            toast(resp.message || 'Already checked in.', 'error');
+          } else if (resp.error === 'not_registered') {
+            showScanResult(null, code, method, false, false, true);
+            toast(resp.message || `"${code}" is not registered for this event.`, 'error');
+          } else {
+            showScanResult(null, code, method, false, false, false);
+            toast(resp.error || resp.message || 'Check-in failed.', 'error');
+          }
+        })
+        .catch(err => {
+          showScanResult(null, code, method, false, false, false);
+          toast('Network error. Is the backend running?', 'error');
+        });
+      }
+      function showScanResult(user, input, method, success, isDuplicate, notRegistered) {
+        const container = $('#scan-result');
+        const nameEl = $('#scan-result-name');
+        const detailEl = $('#scan-result-detail');
+        const badge = $('#scan-result-badge');
+
+        container.classList.remove('hidden');
+
+        if (notRegistered) {
+          nameEl.textContent = 'Not Registered';
+          detailEl.textContent = `"${input}" is not on the registration list for this event.`;
+          badge.textContent = 'NOT REGISTERED';
+          badge.className = 'text-xs font-bold px-3 py-1.5 rounded-full bg-orange-100 text-orange-700';
+        } else if (!success) {
+          nameEl.textContent = 'Not Found';
+          detailEl.textContent = `"${input}" does not match any user.`;
+          badge.textContent = 'FAILED';
+          badge.className = 'text-xs font-bold px-3 py-1.5 rounded-full bg-red-100 text-red-700';
+        } else if (isDuplicate) {
+          nameEl.textContent = user.name;
+          detailEl.textContent = `${user.dept ? user.dept + ' · ' : ''}${user.id} · Already checked in`;
+          badge.textContent = 'DUPLICATE';
+          badge.className = 'text-xs font-bold px-3 py-1.5 rounded-full bg-amber-100 text-amber-700';
+        } else {
+          nameEl.textContent = user.name;
+          detailEl.textContent = `${user.dept ? user.dept + ' · ' : ''}${user.id} · ${method === 'qr' ? '📷 QR Scan' : '⌨ Manual PIN'}`;
+          badge.textContent = 'CHECKED IN ✓';
+          badge.className = 'text-xs font-bold px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700';
+        }
+      }
+
+      // ── Scanner: Recent Check-ins ───────────────────────────
+      function renderRecentCheckins() {
+        const eventId = $('#scan-event-select').value;
+        const container = $('#recent-checkins');
+
+        if (!eventId) {
+          container.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">Select an event to see check-ins.</p>';
+          return;
+        }
+
+        const attendees = data.attendees
+          .filter(a => a.eventId === eventId)
+          .sort((a, b) => b.timestamp - a.timestamp)
+          .slice(0, 20);
+
+        if (attendees.length === 0) {
+          container.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">No check-ins for this event yet.</p>';
+          return;
+        }
+
+        container.innerHTML = attendees.map(a => {
+          const user = data.users.find(u => u.id === a.userId);
+          return `
+            <div class="flex items-center justify-between bg-white rounded-xl border border-gray-100 px-4 py-2.5 shadow-sm">
+              <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 font-bold text-xs">
+                  ${(user ? user.name : a.userName || '?').charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <p class="font-semibold text-sm text-gray-800">${escapeHtml(user ? user.name : a.userName || 'Unknown')}</p>
+                  <p class="text-xs text-gray-400">${a.method === 'qr' ? '📷 QR' : '⌨ Manual'} · ${new Date(a.timestamp).toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit'})}</p>
+                </div>
+              </div>
+              <span class="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-1 rounded-full">✓</span>
+            </div>
+          `;
+        }).join('');
+      }
+
+      // Re-render recent check-ins when event selection changes
+      $('#scan-event-select').addEventListener('change', () => {
+        stopScanner();
+        renderRecentCheckins();
+        $('#scan-result').classList.add('hidden');
+      });
+
+      // ── PWA: Install Prompt ─────────────────────────────────
+      let deferredPrompt;
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        // Show a subtle install button after a few seconds
+        setTimeout(() => {
+          if (deferredPrompt && !window.matchMedia('(display-mode: standalone)').matches) {
+            const installBanner = document.createElement('div');
+            installBanner.id = 'install-banner';
+            installBanner.className = 'fixed top-4 right-4 left-4 max-w-sm mx-auto bg-brand-700 text-white rounded-2xl p-4 shadow-2xl z-50 flex items-center justify-between';
+            installBanner.innerHTML = `
+              <div>
+                <p class="font-bold text-sm">Install App</p>
+                <p class="text-brand-200 text-xs">Add to home screen for quick access</p>
+              </div>
+              <div class="flex gap-2">
+                <button id="btn-dismiss-install" class="text-brand-300 hover:text-white text-sm px-2 py-1">Later</button>
+                <button id="btn-install" class="bg-white text-brand-700 font-bold text-sm px-4 py-1.5 rounded-xl active:scale-95">Install</button>
+              </div>`;
+            document.body.appendChild(installBanner);
+            $('#btn-install').addEventListener('click', async () => {
+              if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const result = await deferredPrompt.userChoice;
+                deferredPrompt = null;
+              }
+              installBanner.remove();
+            });
+            $('#btn-dismiss-install').addEventListener('click', () => installBanner.remove());
+          }
+        }, 3000);
+      });
+
+      // ── Initial Render ──────────────────────────────────────
+      renderAll();
+      populateEventSelect();
+    })();
+  </script>
+
+</body>
+</html>
