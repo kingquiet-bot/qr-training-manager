@@ -408,6 +408,8 @@
 
       function toast(message, type = 'success') {
         const container = $('#toast-container');
+        // Remove any existing toasts to prevent stacking
+        container.innerHTML = '';
         const el = document.createElement('div');
         const bg = type === 'success' ? 'bg-emerald-600' : type === 'error' ? 'bg-red-500' : 'bg-brand-600';
         el.className = `toast ${bg} text-white text-sm font-semibold px-5 py-3 rounded-2xl shadow-xl pointer-events-auto max-w-xs text-center`;
@@ -867,6 +869,12 @@
 
         // ── Wire up Event Status buttons ──────────────────
         window._setEventStatus = function(id, status) {
+          // Confirm before closing an event
+          if (status === 'closed') {
+            if (!confirm('Are you sure you want to close this event? This will stop QR check-ins and clear the active QR list for the Telegram bot.')) {
+              return;
+            }
+          }
           fetch(`/api/events/${id}/status`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1443,6 +1451,7 @@
       // ── Scanner: QR Reader ──────────────────────────────────
       let html5QrCode = null;
       let scannerActive = false;
+      let isScanningPaused = false;
 
       async function startScanner() {
         const eventId = $('#scan-event-select').value;
@@ -1498,12 +1507,16 @@
       $('#btn-start-scan').addEventListener('click', startScanner);
       $('#btn-stop-scan').addEventListener('click', stopScanner);
 
-      // Handle QR scan result
+      // Handle QR scan result — with 3-second cooldown to prevent duplicate fires
       function handleQRScan(decodedText) {
-        // QR code contains a user ID (e.g. "U001") or PIN (e.g. "1001")
+        if (isScanningPaused) return;
+        isScanningPaused = true;
+
         const eventId = $('#scan-event-select').value;
         const text = decodedText.trim();
         processCheckin(eventId, text, 'qr');
+
+        setTimeout(() => { isScanningPaused = false; }, 3000);
       }
 
       // ── Scanner: Manual Check-in ────────────────────────────

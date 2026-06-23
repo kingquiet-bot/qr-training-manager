@@ -765,6 +765,16 @@ def handle_event_status(handler, event_id):
         if not event:
             return json_response(handler, {"error": "event not found"}, 404)
         db.execute("UPDATE events SET status = ? WHERE id = ?", (new_status, event_id))
+
+        # When closing an event, remove its attendees from active_qr_list
+        # so the Telegram bot stops generating QR codes for them.
+        if new_status == "closed":
+            db.execute(
+                """DELETE FROM active_qr_list
+                   WHERE emp_id IN (SELECT emp_code FROM registered_attendees WHERE event_id = ?)""",
+                (event_id,),
+            )
+
         db.commit()
         return json_response(handler, {"event_id": event_id, "event_name": event["name"], "status": new_status})
     finally:
