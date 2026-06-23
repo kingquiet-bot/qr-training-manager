@@ -775,6 +775,15 @@ def handle_event_status(handler, event_id):
                 (event_id,),
             )
 
+        # When going live, push all registered attendees into active_qr_list
+        # so the Telegram bot instantly recognizes them.
+        if new_status == "live":
+            db.execute(
+                """INSERT OR IGNORE INTO active_qr_list (emp_id, name)
+                   SELECT emp_code, name FROM registered_attendees WHERE event_id = ?""",
+                (event_id,),
+            )
+
         db.commit()
         return json_response(handler, {"event_id": event_id, "event_name": event["name"], "status": new_status})
     finally:
