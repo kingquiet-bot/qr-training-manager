@@ -1,0 +1,17 @@
+# Environment secrets
+.env
+
+# Database
+attendance.db
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Claude session files
+.claude/
+claude_resume_session.txt
+
+# MCP config (may contain tokens)
+.mcp.json

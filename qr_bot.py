@@ -33,7 +33,7 @@ load_dotenv()
 # ----------------------------------------
 
 # ── Configuration ──────────────────────────────────────────────
-BOT_TOKEN = "8657572670:AAHrYPx9WYUTtbbvbXkwZQt5LL7QdvMaiBk"
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "attendance.db")
 
 # ── Logging ────────────────────────────────────────────────────
