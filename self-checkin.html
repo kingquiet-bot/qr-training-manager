@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#4f46e5" />
+  <title>Self Check-in — Training Attendance</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f8fafc;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; padding: 20px;
+    }
+    .card {
+      max-width: 440px; width: 100%; background: #fff;
+      border-radius: 20px; box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+      padding: 40px 32px; text-align: center;
+    }
+    .logo { font-size: 40px; margin-bottom: 8px; }
+    h1 { font-size: 20px; color: #1e293b; margin-bottom: 4px; }
+    .subtitle { font-size: 13px; color: #64748b; margin-bottom: 24px; }
+
+    .event-name { font-size: 16px; font-weight: 700; color: #4f46e5; margin-bottom: 6px; }
+    .event-date { font-size: 12px; color: #94a3b8; margin-bottom: 16px; }
+
+    .status-badge {
+      display: inline-block; padding: 4px 14px; border-radius: 9999px;
+      font-size: 12px; font-weight: 700; margin-bottom: 24px;
+    }
+    .status-upcoming { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
+    .status-live { background: #ecfdf5; color: #065f46; border: 1px solid #6ee7b7; }
+    .status-closed { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+
+    .form-group { margin-bottom: 16px; text-align: left; }
+    .form-group label {
+      display: block; font-size: 12px; font-weight: 600;
+      color: #64748b; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .form-group input {
+      width: 100%; border: 1px solid #d1d5db; border-radius: 12px;
+      padding: 12px 16px; font-size: 15px; font-family: 'Courier New', monospace;
+      outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .form-group input:focus {
+      border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+    }
+
+    .btn {
+      width: 100%; padding: 14px; border: none; border-radius: 12px;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+      transition: all 0.15s; color: #fff; margin-top: 4px;
+    }
+    .btn-primary { background: #4f46e5; box-shadow: 0 2px 8px rgba(79,70,229,0.3); }
+    .btn-primary:hover { background: #4338ca; }
+    .btn-primary:active { transform: scale(0.98); }
+    .btn-primary:disabled { background: #d1d5db; cursor: not-allowed; box-shadow: none; }
+
+    .msg {
+      margin-top: 16px; padding: 12px 16px; border-radius: 12px;
+      font-size: 14px; font-weight: 600; display: none; text-align: center;
+    }
+    .msg.show { display: block; }
+    .msg-success { background: #ecfdf5; color: #065f46; border: 1px solid #6ee7b7; }
+    .msg-error { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+    .msg-warning { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
+    .msg-loading { background: #eff6ff; color: #1e40af; border: 1px solid #93c5fd; }
+
+    .spinner {
+      display: inline-block; width: 16px; height: 16px;
+      border: 2px solid #e2e8f0; border-top-color: #4f46e5;
+      border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 8px; vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .footer { margin-top: 20px; font-size: 11px; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">📋</div>
+    <h1>Self Check-in</h1>
+    <p class="subtitle">Training Attendance Manager</p>
+
+    <div id="event-info">
+      <p class="event-name" id="ev-name">Loading…</p>
+      <p class="event-date" id="ev-date"></p>
+      <span class="status-badge" id="ev-status-badge">—</span>
+    </div>
+
+    <div id="checkin-form">
+      <div class="form-group">
+        <label for="emp-code">Employee ID</label>
+        <input type="text" id="emp-code" placeholder="Enter your Employee ID" autocomplete="off" autocapitalize="off" />
+      </div>
+      <button class="btn btn-primary" id="btn-checkin">✅ Check In</button>
+    </div>
+
+    <div class="msg" id="message"></div>
+    <div class="footer">Training Attendance Manager</div>
+  </div>
+
+  <script>
+    (function() {
+      const $ = (sel) => document.querySelector(sel);
+
+      const params = new URLSearchParams(window.location.search);
+      const eventId = params.get('event_id');
+      const empCodeInput = $('#emp-code');
+      const btnCheckin = $('#btn-checkin');
+      const msgEl = $('#message');
+      const evNameEl = $('#ev-name');
+      const evDateEl = $('#ev-date');
+      const statusBadge = $('#ev-status-badge');
+
+      let eventStatus = '';
+
+      // ── Show message ──────────────────────────────────────
+      function showMsg(text, type) {
+        msgEl.textContent = text;
+        msgEl.className = 'msg show msg-' + type;
+      }
+
+      function hideMsg() {
+        msgEl.className = 'msg';
+      }
+
+      function setFormEnabled(enabled) {
+        empCodeInput.disabled = !enabled;
+        btnCheckin.disabled = !enabled;
+        if (!enabled) {
+          btnCheckin.textContent = 'Check-in Unavailable';
+        } else {
+          btnCheckin.textContent = '✅ Check In';
+        }
+      }
+
+      // ── Fetch event info ──────────────────────────────────
+      if (!eventId) {
+        evNameEl.textContent = 'Missing event ID';
+        statusBadge.textContent = '⚠ Error';
+        statusBadge.className = 'status-badge status-closed';
+        setFormEnabled(false);
+        showMsg('No event ID provided. Please use the check-in link from your admin.', 'error');
+      } else {
+        fetch('/api/events/' + encodeURIComponent(eventId) + '/self-checkin-info')
+          .then(r => r.json())
+          .then(data => {
+            if (data.error) {
+              evNameEl.textContent = 'Event not found';
+              statusBadge.textContent = '❌ ' + data.error;
+              statusBadge.className = 'status-badge status-closed';
+              setFormEnabled(false);
+              return;
+            }
+
+            evNameEl.textContent = data.event_name;
+            evDateEl.textContent = data.event_date || '';
+            eventStatus = data.event_status;
+
+            if (eventStatus === 'upcoming') {
+              statusBadge.textContent = '⏳ Upcoming — Not Started';
+              statusBadge.className = 'status-badge status-upcoming';
+              setFormEnabled(false);
+              showMsg('Event has not started yet. Please wait until the admin starts the session.', 'warning');
+            } else if (eventStatus === 'closed') {
+              statusBadge.textContent = '🔒 Closed — Ended';
+              statusBadge.className = 'status-badge status-closed';
+              setFormEnabled(false);
+              showMsg('This event has ended. Check-in is closed.', 'error');
+            } else if (eventStatus === 'live') {
+              statusBadge.textContent = '🟢 Live — Check-in Open';
+              statusBadge.className = 'status-badge status-live';
+              setFormEnabled(true);
+            } else {
+              statusBadge.textContent = 'Status: ' + eventStatus;
+              statusBadge.className = 'status-badge status-upcoming';
+              setFormEnabled(false);
+            }
+          })
+          .catch(err => {
+            evNameEl.textContent = 'Connection error';
+            statusBadge.textContent = '⚠ Error';
+            statusBadge.className = 'status-badge status-closed';
+            setFormEnabled(false);
+            showMsg('Could not connect to server. Please try again.', 'error');
+          });
+      }
+
+      // ── Handle check-in ───────────────────────────────────
+      btnCheckin.addEventListener('click', () => {
+        const empCode = empCodeInput.value.trim();
+        if (!empCode) {
+          showMsg('Please enter your Employee ID.', 'error');
+          return;
+        }
+
+        hideMsg();
+        btnCheckin.disabled = true;
+        btnCheckin.innerHTML = '<span class="spinner"></span> Checking in…';
+
+        fetch('/api/checkin/self', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ emp_code: empCode, event_id: eventId })
+        })
+        .then(r => r.json())
+        .then(resp => {
+          if (resp.status === 'ok') {
+            showMsg(resp.message || 'Check-in successful!', 'success');
+            empCodeInput.value = '';
+            btnCheckin.disabled = true;
+            btnCheckin.textContent = '✅ Done!';
+          } else if (resp.error === 'already_checked_in') {
+            showMsg(resp.message || 'You are already checked in.', 'warning');
+            btnCheckin.disabled = false;
+            btnCheckin.textContent = '✅ Check In';
+          } else {
+            showMsg(resp.error || resp.message || 'Check-in failed.', 'error');
+            btnCheckin.disabled = false;
+            btnCheckin.textContent = '✅ Check In';
+          }
+        })
+        .catch(err => {
+          showMsg('Network error. Please try again.', 'error');
+          btnCheckin.disabled = false;
+          btnCheckin.textContent = '✅ Check In';
+        });
+      });
+
+      // Allow Enter key to submit
+      empCodeInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          btnCheckin.click();
+        }
+      });
+
+      // Auto-focus the input
+      if (eventId) {
+        setTimeout(() => empCodeInput.focus(), 500);
+      }
+    })();
+  </script>
+</body>
+</html>
