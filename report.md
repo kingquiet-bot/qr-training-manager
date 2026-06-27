@@ -29,7 +29,7 @@ I adopted a Get-Shit-Done (GSD) project-based approach. My git workflow consists
 ![Setup Event](https://raw.githubusercontent.com/kingquiet-bot/qr-training-manager/main/assets/Setup_Event.jpg)
 ![Event Detail](https://raw.githubusercontent.com/kingquiet-bot/qr-training-manager/main/assets/Event_Detail.jpg)
 ![Import Attendance.png](https://raw.githubusercontent.com/kingquiet-bot/qr-training-manager/main/assets/import_attendance.png)
-![Generate QR](https://raw.githubusercontent.com/kingquiet-bot/qr-training-manager/main/Generate_QR.jpg)
+![Generate QR](https://raw.githubusercontent.com/kingquiet-bot/qr-training-manager/main/assets/Generate_QR.jpg)
 ![Telegram bot](https://raw.githubusercontent.com/kingquiet-bot/qr-training-manager/main/assets/Telegram_bot.jpg)
 ![Scanner](https://raw.githubusercontent.com/kingquiet-bot/qr-training-manager/main/assets/Scanner.jpg)
 ![Self-Check-In](https://raw.githubusercontent.com/kingquiet-bot/qr-training-manager/main/assets/self-check-in.jpg)
