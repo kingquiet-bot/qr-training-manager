@@ -33,4 +33,4 @@ Currently, she uses manual paper sign-in sheets for branch manager and staff tra
 - [x] Create and include an End-User Guide for non-technical users.
 - [ ] Refactor the self-check-in link generation to automatically resolve the correct IP without manual entry.
 - [ ] Develop a proper Browser Web View layout alongside the existing Mobile View.
-- [ ] Investigate the `tele.py` network issue and implement a proxy workaround or document the VPN requirement clearly.
+- [ ] Investigate the `qr_bot.py` network issue and implement a proxy workaround or document the VPN requirement clearly.
