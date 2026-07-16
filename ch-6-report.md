@@ -4,7 +4,7 @@
 
 - **GitHub username:** @kingquiet-bot
 - **Repo URL:** https://github.com/kingquiet-bot/qr-training-manager
-- **Live URL (deployed, public):** https://qr-training-manager.vercel.app (Docker-based deployment)
+- **Live URL (deployed, public):** https://qr-training-manager.onrender.com
 - **License:** MIT
 
 ## Issues Closed (from Chapter 5 feedback)
@@ -50,8 +50,12 @@
 - **Resolution used:** 1280×800 desktop, 390×844 mobile
 
 ![screenshot 1 — Admin Dashboard Desktop](screenshots/01-dashboard-desktop.png)
-![screenshot 2 — Self Check-in Page](screenshots/02-self-checkin-desktop.png)
-![screenshot 3 — Mobile Dashboard](screenshots/03-dashboard-mobile.png)
+![screenshot 2 — Create Event Form Desktop](screenshots/02-create-event-desktop.png)
+![screenshot 3 — Event Detail Desktop](screenshots/03-event-detail-desktop.png)
+![screenshot 4 — Self Check-in Page Desktop](screenshots/04-self-checkin-desktop.png)
+![screenshot 5 — Mobile Dashboard](screenshots/05-dashboard-mobile.png)
+![screenshot 6 — QR Scanner Mobile](screenshots/06-scanner-mobile.png)
+![screenshot 7 — Mobile Self Check-in](screenshots/07-self-checkin-mobile.png)
 
 ## Gallery Card (this project goes public)
 
@@ -68,9 +72,11 @@
 - **Agents** — HR trainer automation (`.claude/agents/HR_Trainer.md`)
 
 ### Deployment
+- **Platform:** Render (free tier)
 - **Docker** — Containerized deployment with `Dockerfile`
-- **GitHub Actions** — Automated build and push to GitHub Container Registry
+- **GitHub Actions** — Automated build and keep-alive workflow
 - **Requirements** — `requirements.txt` for dependency management
+- **Keep-Alive** — Automatic pinging to prevent sleep (free tier)
 
 ### Analytics
 - **Tool:** GoatCounter
@@ -83,13 +89,25 @@
 - **Desktop Layout:** Responsive design working on 1280×800
 - **Error Handling:** Improved network error messages
 
+## Completed for Chapter 6
+
+✅ Fixed all 3 open issues from Chapter 5
+✅ Polished UI/UX with responsive desktop design
+✅ Added analytics tracking (GoatCounter)
+✅ Created comprehensive README with troubleshooting
+✅ Set up Docker deployment with GitHub Actions
+✅ Deployed to Render (free tier)
+✅ Added keep-alive script to prevent sleep
+✅ Created detailed deployment documentation
+✅ Captured screenshots at specified resolutions
+
 ## Next Steps (Chapter 7)
 
-1. Set up production deployment with proper environment variables
-2. Add user authentication for admin dashboard
-3. Implement QR code scanning with camera permissions
-4. Add data export functionality
-5. Create mobile app wrapper (PWA)
+1. Add user authentication for admin dashboard
+2. Implement QR code scanning with camera permissions
+3. Add data export functionality
+4. Create mobile app wrapper (PWA)
+5. Upgrade to Render paid tier if needed (for always-on)
 
 ---
 
