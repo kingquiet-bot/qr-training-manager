@@ -1,139 +1,172 @@
 # QR-Based Training Attendance Manager
 
-A lightweight, zero-dependency, full-stack solution for managing training attendance using QR codes and a Telegram Bot. 
+A lightweight, zero-dependency, full-stack solution for managing training attendance using QR codes and a Telegram Bot. Perfect for HR departments, training coordinators, and event organizers who need a simple, efficient way to track attendance.
 
-## Features
-* **PWA Frontend:** Mobile-friendly dashboard and QR scanner.
-* **Telegram Bot Integration:** Auto-generates QR codes for registered attendees.
-* **Offline-capable Database:** Uses SQLite for easy setup.
-* **Email Reporting:** Sends attendance CSV reports directly via email.
-
-## How to Run Locally
-1. Clone this repository.
-2. Ensure you have Python 3 installed.
-3. Install dependencies for the bot: `pip install python-telegram-bot qrcode[pil] Pillow python-dotenv`
-4. Rename `.env.example` to `.env`.
-5. Open the `.env` file and replace the placeholder values with your actual Telegram Bot Token and Gmail App Password.
-6. When you run `python3 app.py` for the first time, a fresh `attendance.db` will be created automatically.
-7. Run the Web Server: `python3 app.py`
-8. Run the Telegram Bot: `python3 qr_bot.py`
-9. Open your browser and go to `http://localhost:5000`
-
-## Screenshots
 ![Dashboard](assets/Dashboard.jpg)
-![Setup Event](assets/Setup_Event.jpg)
-![Event Detail](assets/Event_Detail.jpg)
-![Import Attendance.png](assets/import_attendance.png)
-![Generate QR](Generate_QR.jpg)
-![Telegram bot](assets/Telegram_bot.jpg)
-![Scanner](assets/Scanner.jpg)
-![Self-Check-In](assets/self-check-in.jpg)
-![Download Report](assets/Download_Report.jpg)
-![Send_Report](assets/Send_Report.jpg)
 
-## End User Guide
+## ✨ Features
 
-📖 End User Guide(English Version)
-This system is designed to provide a seamless experience for both training attendees and administrators.
+- **📱 PWA Frontend** — Mobile-friendly dashboard and QR scanner that works offline
+- **🤖 Telegram Bot Integration** — Auto-generates QR codes for registered attendees
+- **💾 Offline-capable Database** — Uses SQLite for easy setup, no external database needed
+- **📧 Email Reporting** — Sends attendance CSV reports directly via email
+- **🔗 Self-Check-in** — Employees can check themselves in using a shared link
+- **📊 Real-time Dashboard** — Live tracking of attendance with instant updates
 
-1. For Attendees & Staff
-Step 1 - Obtain Your QR Code
+## 📋 Prerequisites
 
-Open Telegram and search for the designated Training Bot.
+- **Python 3.7+** — [Download Python](https://www.python.org/downloads/)
+- **pip** — Python package manager (comes with Python)
+- **Telegram Bot Token** — Get one from [@BotFather](https://t.me/BotFather) on Telegram
+- **Gmail App Password** (optional) — For email reporting feature
 
-Send the /start command and follow the prompts to enter your Name, Position, and Department.
+## 🚀 Quick Start
 
-Upon completion, the bot will instantly generate and send you a Unique QR Code. Keep this QR code ready when attending the training.
+### 1. Clone the Repository
 
-Step 2 - Check-In (Attendance)
+```bash
+git clone https://github.com/kingquiet-bot/qr-training-manager.git
+cd qr-training-manager
+```
 
-Upon arriving at the training venue, open the Check-in URL provided by the Admin (You can also install it as a PWA app on your phone).
+### 2. Install Dependencies
 
-Tap the "Scan QR" button and use your device's camera to scan the QR Code from your Telegram.
+```bash
+pip install python-telegram-bot qrcode[pil] Pillow python-dotenv flask
+```
 
-Once the screen displays "Check-in Successful", your attendance has been successfully recorded.
+### 3. Configure Environment Variables
 
-2. For Admin / Trainers
-Step 1 - Setup a New Event
+```bash
+# Copy the example environment file
+cp .env.example .env
 
-Log into the Admin Dashboard and navigate to Setup Event.
+# Edit .env with your credentials
+# Required: TELEGRAM_BOT_TOKEN=your_token_here
+# Optional: SMTP_EMAIL=your_email@gmail.com
+# Optional: SMTP_PASSWORD=your_app_password
+# Optional: TELEGRAM_PROXY=socks5://user:pass@proxy:1080
+```
 
-Enter the Training Name, Date, and Time, then save the event with an "Upcoming" status.
+### 4. Start the Application
 
-Step 2 - Bulk Import Attendance
+```bash
+# Terminal 1: Start the web server
+python3 app.py
 
-Prepare an Excel or CSV file containing the list of expected attendees (Name, Position, Department).
+# Terminal 2: Start the Telegram bot
+python3 qr_bot.py
+```
 
-Go to the Import Attendance section in the Dashboard, select your file, and upload it.
+### 5. Access the Application
 
-This feature allows you to quickly register multiple staff members into the system at once without manual entry.
+Open your browser and go to: **http://localhost:5000**
 
-Step 3 - Event State Management (Open/Close Check-ins)
+## 📖 Usage Guide
 
-When it is time to accept attendees, change the respective event's status to "Live".
+### For Attendees & Staff
 
-(Note: To prevent data mix-ups, the system strictly allows only one "Live" event at a time).
+1. **Get Your QR Code**
+   - Open Telegram and search for the Training Bot
+   - Send `/start` and follow the prompts
+   - Receive your unique QR code
 
-Once the training begins or the attendance window ends, change the status to "Closed" to prevent late check-ins.
+2. **Check-In**
+   - Open the Check-in URL provided by admin
+   - Tap "Scan QR" and scan your code from Telegram
+   - See "Check-in Successful" confirmation
 
-Step 4 - Send Automated Email Reports
+### For Admin / Trainers
 
-Navigate to the Email Reporting (Send Report) section in the Dashboard.
+1. **Setup Event**
+   - Log into Admin Dashboard
+   - Click "Create New Event"
+   - Enter training name, date, and time
 
-Select the completed training event from the dropdown menu and click Send.
+2. **Import Attendees**
+   - Prepare Excel/CSV with attendee list
+   - Go to Import Attendance section
+   - Upload your file
 
-The system will automatically convert the attendance data into a CSV file and email it to the designated HR or Management team.
+3. **Manage Check-ins**
+   - Change event status to "Live" to open check-ins
+   - Change to "Closed" when training ends
+   - Only one event can be "Live" at a time
 
-မြန်မာဘာသာဖြင့် ဖတ်ရှုရန်
+4. **Send Reports**
+   - Navigate to Email Reporting
+   - Select completed event
+   - Click Send to email CSV report
 
-📖 End User Guide (အသုံးပြုသူများအတွက် လမ်းညွှန်)
-ဤစနစ်သည် သင်တန်းတက်ရောက်သူများ (Attendees) နှင့် သင်တန်းစီစဉ်သူများ (Admin/Trainers) အတွက် အလွယ်တကူ အသုံးပြုနိုင်ရန် ရည်ရွယ်တည်ဆောက်ထားခြင်း ဖြစ်ပါသည်။
+## 🔧 Troubleshooting
 
-၁။ သင်တန်းသားများအတွက် (For Attendees & Staff)
-အဆင့် (၁) - QR Code ရယူခြင်း
+### Telegram Bot Network Issues
 
-- မိမိဖုန်းရှိ Telegram မှတစ်ဆင့် သတ်မှတ်ထားသော Training Bot သို့ ဝင်ရောက်ပါ။
+If the bot fails to connect or only works with VPN:
 
-- /start ကိုနှိပ်၍ မိမိ၏ အမည်၊ ရာထူးနှင့် ဌာနအချက်အလက်များကို ညွှန်ကြားချက်အတိုင်း ဖြည့်သွင်းပါ။
+1. **Check your network** — Some corporate networks block Telegram API
+2. **Use a proxy** — Add to your `.env` file:
+   ```
+   TELEGRAM_PROXY=socks5://user:password@proxy.example.com:1080
+   ```
+3. **VPN workaround** — Connect to VPN before starting the bot
+4. **Firewall rules** — Ensure outbound connections to `api.telegram.org:443` are allowed
 
-- ဖြည့်သွင်းပြီးသည်နှင့် သင့်အတွက် သီးသန့် (Unique) QR Code တစ်ခုကို Bot မှ ချက်ချင်း ပေးပို့လာပါမည်။ (ထို QR   Code အား သင်တန်းသို့ လာရောက်ချိန်တွင် အသင့် ပြင်ဆင်ထားပါ)။
+### Self-Check-in Link Issues
 
-အဆင့် (၂) - Check-in ပြုလုပ်ခြင်း (Attendance)
+If attendees can't access the self-check-in link:
 
-- သင်တန်းခန်းမသို့ ရောက်ရှိချိန်တွင် Admin မှ ပေးထားသော Check-in URL သို့ ဝင်ရောက်ပါ (PWA App အနေဖြင့်လည်း   ဖုန်းတွင်   Install ပြုလုပ်ထားနိုင်သည်)။
+1. **Use your computer's IP** — Instead of `http://localhost:5000`, use `http://192.168.x.x:5000`
+   - Find your IP: Windows (`ipconfig`), Mac/Linux (`ifconfig`)
+2. **Same network** — Ensure admin and attendees are on the same WiFi/network
+3. **Firewall** — Check that port 5000 is not blocked
 
-- "Scan QR" ခလုတ်ကိုနှိပ်၍ ဖုန်းကင်မရာဖြင့် မိမိ၏ Telegram မှ QR Code ကို ဖတ်ခိုင်းပါ။
+### Common Errors
 
-- မျက်နှာပြင်ပေါ်တွင် "Check-in Successful" ဟု ပေါ်လာပါက သင့်၏ တက်ရောက်မှုစာရင်း အောင်မြင်စွာ မှတ်တမ်း ဝင်သွားပြီ ဖြစ်  သည်။
+| Error | Solution |
+|-------|----------|
+| `TELEGRAM_BOT_TOKEN not set` | Add token to `.env` file |
+| `python-telegram-bot not installed` | Run `pip install python-telegram-bot` |
+| `Could not connect to backend` | Ensure `python3 app.py` is running |
+| `Event has not started yet` | Change event status to "Live" |
 
-၂။ သင်တန်းစီစဉ်သူများအတွက် (For Admin / Trainers)
+## 📁 Project Structure
 
-အဆင့် (၁) - Event အသစ် ဖန်တီးခြင်း (Setup Event)
+```
+qr-training-manager/
+├── app.py              # Flask web server & API
+├── qr_bot.py           # Telegram bot for QR generation
+├── index.html          # Admin dashboard (PWA)
+├── self-checkin.html   # Employee self-check-in page
+├── assets/             # Screenshots and images
+├── feedback/           # User feedback and interviews
+├── .claude/            # Claude Code skills and agents
+│   ├── skills/         # Custom skills
+│   └── agents/         # Custom agents
+├── .env.example        # Environment variables template
+└── README.md           # This file
+```
 
-- Admin Dashboard သို့ ဝင်ရောက်၍ Setup Event ကို နှိပ်ပါ။
+## 🤖 AI Tools Used
 
-- သင်တန်းအမည်၊ နေ့စွဲ နှင့် အချိန်တို့ကို ဖြည့်သွင်းပြီး Event ကို "Upcoming" Status ဖြင့် သိမ်းဆည်းပါ။
+This project was built using Claude Code with:
 
-- အဆင့် (၂) - သင်တန်းသားစာရင်း အစုလိုက်သွင်းယူခြင်း (Import Attendance)
+- **Skills** — Custom attendance management rules
+- **Agents** — HR trainer automation
+- **MCP** — SQLite database integration
+- **GSD Methodology** — Get-Shit-Done approach
 
-- သင်တန်းတက်ရောက်မည့် ဝန်ထမ်းများ၏ အမည်၊ ရာထူး၊ ဌာန စသည့် အချက်အလက်များ ပါဝင်သော စာရင်း (Excel သို့မဟုတ် CSV ဖိုင်) ကို အသင့်ပြင်ဆင်ပါ။
+## 📄 License
 
-- Admin Dashboard ရှိ Import Attendance ကဏ္ဍသို့ ဝင်ရောက်၍ အဆိုပါ ဖိုင်အား ရွေးချယ်ကာ Upload ပြုလုပ်ပါ။
+MIT License - see [LICENSE](LICENSE) for details
 
-- ဤစနစ်ဖြင့် သင်တန်းသားများ၏ အချက်အလက်များကို တစ်ဦးချင်း စာရင်းသွင်းနေစရာမလိုဘဲ တစ်ကြိမ်တည်းဖြင့် စနစ်ထဲသို့ အလွယ်တကူ Bulk Import ပြုလုပ် သိမ်းဆည်းနိုင်မည် ဖြစ်ပါသည်။
+## 🙏 Acknowledgments
 
-အဆင့် (၃) - Check-in အား ဖွင့်လှစ်ခြင်း နှင့် ပိတ်ခြင်း (Event State Management)
+- Built with ❤️ using Claude Code
+- QR code generation: [qrcode](https://pypi.org/project/qrcode/)
+- Telegram integration: [python-telegram-bot](https://python-telegram-bot.org/)
+- Frontend: Tailwind CSS, HTML5 QR Scanner
 
-- သင်တန်းစတင်ခါနီး Check-in လက်ခံမည့်အချိန်တွင် သက်ဆိုင်ရာ Event ၏ Status ကို "Live" သို့ ပြောင်းလဲပေးပါ။
+---
 
-  (မှတ်ချက် - ဒေတာများ ရောထွေးမှု မဖြစ်စေရန် တစ်ကြိမ်လျှင် Live ဖြစ်နေသော Event တစ်ခုကိုသာ Check-in လက်ခံမည် ဖြစ်သည်။)
-
-- သင်တန်းစတင်ပြီးနောက် (သို့မဟုတ်) အချိန်စေ့သွားပါက Event Status ကို "Closed" သို့ ပြောင်းလဲလိုက်ခြင်းဖြင့် နောက်ကျမှ Check-in ဝင်ရောက်ခြင်းများကို တားဆီးနိုင်ပါသည်။
-
-အဆင့် (၄) - တက်ရောက်မှု စာရင်း (Report) ပေးပို့ခြင်း
-
-- Dashboard မှတစ်ဆင့် Email Reporting (Send Report) ကဏ္ဍသို့ ဝင်ရောက်ပါ။
-
-- Dropdown Menu မှ မိမိ Report ထုတ်လိုသော သက်ဆိုင်ရာ သင်တန်းကို ရွေးချယ်ပြီး Send ကို နှိပ်ပါ။
-
-- တက်ရောက်သူစာရင်းအား CSV ဖိုင်အဖြစ် ပြောင်းလဲပြီး သက်ဆိုင်ရာ စီမံခန့်ခွဲသူများ (HR/Management) ၏ အီးမေးလ်များထံသို့ အလိုအလျောက် ပေးပို့သွားမည် ဖြစ်ပါသည်။
+**Need help?** Open an issue or contact the developer.

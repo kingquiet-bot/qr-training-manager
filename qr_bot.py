@@ -35,6 +35,9 @@ load_dotenv()
 # ── Configuration ──────────────────────────────────────────────
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "attendance.db")
+# Proxy configuration (optional) - set if behind restrictive firewall
+# Example: TELEGRAM_PROXY=socks5://user:pass@proxy.example.com:1080
+PROXY_URL = os.environ.get("TELEGRAM_PROXY", "")
 
 # ── Logging ────────────────────────────────────────────────────
 logging.basicConfig(
@@ -243,7 +246,14 @@ def main():
         )
         sys.exit(1)
 
+    # Build application with optional proxy support
     app_builder = Application.builder().token(BOT_TOKEN)
+
+    # Configure proxy if set (helps with restrictive networks)
+    if PROXY_URL:
+        logger.info(f"Using proxy: {PROXY_URL[:30]}...")
+        app_builder = app_builder.proxy(PROXY_URL)
+
     application = app_builder.build()
 
     # ── Register handlers ──────────────────────────────
@@ -257,7 +267,21 @@ def main():
 
     logger.info("🤖 QR Bot starting — polling Telegram...")
     logger.info(f"   Database: {DATABASE}")
-    application.run_polling()
+    if PROXY_URL:
+        logger.info("   Proxy: Configured")
+
+    try:
+        application.run_polling()
+    except Exception as e:
+        logger.error(f"Failed to start bot: {e}")
+        logger.error(
+            "Network Troubleshooting:\n"
+            "1. Check your internet connection\n"
+            "2. If behind a corporate firewall, set TELEGRAM_PROXY env var\n"
+            "3. Example: export TELEGRAM_PROXY=socks5://user:pass@proxy:1080\n"
+            "4. Or try connecting via VPN"
+        )
+        sys.exit(1)
 
 
 if __name__ == "__main__":

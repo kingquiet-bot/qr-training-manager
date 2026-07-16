@@ -854,6 +854,11 @@ def handle_self_checkin_page(handler, query):
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#4f46e5" />
   <title>Self Check-in — Training Attendance</title>
+
+  <!-- GoatCounter Analytics -->
+  <script data-goatcounter="https://qr-training-manager.goatcounter.com/count"
+          async src="https://cdn.jsdelivr.net/npm/@goatcounter/count@2/dist/count.min.js"></script>
+
   <style>
     * {{ margin: 0; padding: 0; box-sizing: border-box; }}
     body {{
@@ -946,6 +951,7 @@ def handle_self_checkin_page(handler, query):
       var btn = document.getElementById('btn-checkin');
       var input = document.getElementById('emp-code');
       var msgEl = document.getElementById('message');
+      var apiBaseUrl = window.location.origin;
 
       function showMsg(text, type) {{
         msgEl.textContent = text;
@@ -985,7 +991,7 @@ def handle_self_checkin_page(handler, query):
           }}
         }})
         .catch(function() {{
-          showMsg('Network error. Please try again.', 'error');
+          showMsg('Network error. Please check your connection and try again.', 'error');
           btn.disabled = false;
           btn.textContent = '✅ Check In';
         }});

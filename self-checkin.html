@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#4f46e5" />
   <title>Self Check-in — Training Attendance</title>
+
+  <!-- GoatCounter Analytics -->
+  <script data-goatcounter="https://qr-training-manager.goatcounter.com/count"
+          async src="https://cdn.jsdelivr.net/npm/@goatcounter/count@2/dist/count.min.js"></script>
+
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -115,6 +120,7 @@
       const statusBadge = $('#ev-status-badge');
 
       let eventStatus = '';
+      let apiBaseUrl = window.location.origin;
 
       // ── Show message ──────────────────────────────────────
       function showMsg(text, type) {
@@ -144,6 +150,7 @@
         setFormEnabled(false);
         showMsg('No event ID provided. Please use the check-in link from your admin.', 'error');
       } else {
+        // Try to fetch from current origin first
         fetch('/api/events/' + encodeURIComponent(eventId) + '/self-checkin-info')
           .then(r => r.json())
           .then(data => {
@@ -180,11 +187,12 @@
             }
           })
           .catch(err => {
+            // If fetch fails, show connection error with helpful message
             evNameEl.textContent = 'Connection error';
             statusBadge.textContent = '⚠ Error';
             statusBadge.className = 'status-badge status-closed';
             setFormEnabled(false);
-            showMsg('Could not connect to server. Please try again.', 'error');
+            showMsg('Could not connect to server. Please check your network connection and try again.', 'error');
           });
       }
 
