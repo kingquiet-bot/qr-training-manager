@@ -48,6 +48,44 @@ cp .env.example .env
 # Optional: TELEGRAM_PROXY=socks5://user:pass@proxy:1080
 ```
 
+## 🌐 Deploy to Render (Free)
+
+### Quick Deploy:
+
+1. **Click the button below:**
+   [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
+
+2. **Or follow manual steps:**
+   - Go to https://render.com
+   - Sign up with GitHub
+   - Create new "Web Service"
+   - Connect repository: `kingquiet-bot/qr-training-manager`
+   - Select "Docker" runtime
+   - Add environment variables
+   - Deploy!
+
+### Detailed Guide:
+
+See [RENDER_DEPLOYMENT.md](RENDER_DEPLOYMENT.md) for step-by-step instructions.
+
+### Your Live URL (after deployment):
+
+```
+https://qr-training-manager.onrender.com
+```
+
+### Keep-Alive (Prevent Sleep):
+
+Render free tier sleeps after 15 min of inactivity. Use the keep-alive script:
+
+```bash
+# Run locally (keeps app awake)
+python3 keep_alive.py
+
+# Or use GitHub Actions (automatic)
+# See keep-alive.yml workflow
+```
+
 ### 4. Start the Application
 
 ```bash
