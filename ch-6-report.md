@@ -11,27 +11,30 @@
 
 | # | Issue | Closed link | Fixed with (AI agent / MCP / skill) |
 |---|-------|-------------|--------------------------------------|
-| 1 | Self-check-in link doesn't always show up directly; requires manually entering IP address | [Fixed in self-checkin.html and index.html](https://github.com/kingquiet-bot/qr-training-manager/commit/abc123) | Claude Code with frontend-design skill |
-| 2 | Browser Web View missing for desktop users | [Fixed in index.html](https://github.com/kingquiet-bot/qr-training-manager/commit/def456) | Claude Code with responsive design |
-| 3 | Telegram bot doesn't work on certain networks without VPN | [Fixed in qr_bot.py](https://github.com/kingquiet-bot/qr-training-manager/commit/ghi789) | Claude Code with network troubleshooting |
+| 1 | Self-check-in link doesn't always show up directly; requires manually entering IP address | [GitHub Issue #1](https://github.com/kingquiet-bot/qr-training-manager/issues/1) | Claude Code with frontend-design skill |
+| 2 | Browser Web View missing for desktop users | [GitHub Issue #2](https://github.com/kingquiet-bot/qr-training-manager/issues/2) | Claude Code with responsive design |
+| 3 | Telegram bot doesn't work on certain networks without VPN | [GitHub Issue #3](https://github.com/kingquiet-bot/qr-training-manager/issues/3) | Claude Code with network troubleshooting |
 
 ### Issue 1: Self-check-in Link Generation
 - **Problem:** Link generation used `window.location.origin` which could be localhost, causing access issues for attendees on different networks
 - **Solution:** Added network detection and helpful tips when accessing via localhost
 - **Changes:** Updated `index.html` to show network tip, added `apiBaseUrl` variable to `self-checkin.html`
 - **How fixed:** Used Claude Code to analyze the issue and implement network-aware link generation
+- **GitHub Issue:** [#1](https://github.com/kingquiet-bot/qr-training-manager/issues/1) - Closed
 
 ### Issue 2: Desktop Web View
 - **Problem:** Mobile-focused layout with `max-w-lg` (640px) was too narrow for desktop
 - **Solution:** Implemented responsive design with sidebar navigation for desktop
-- **Changes:** Updated main container to `max-w-6xl`, added sidebar navigation, made bottom nav hidden on desktop
+- **Changes:** Updated main container to `max-w-full`, added sidebar navigation, made bottom nav hidden on desktop
 - **How fixed:** Used Claude Code with responsive design patterns and Tailwind CSS breakpoints
+- **GitHub Issue:** [#2](https://github.com/kingquiet-bot/qr-training-manager/issues/2) - Closed
 
 ### Issue 3: Telegram Bot Network Issue
 - **Problem:** Bot failed to connect on certain corporate networks without VPN
 - **Solution:** Added proxy support and improved error handling
 - **Changes:** Added `TELEGRAM_PROXY` environment variable, proxy configuration in bot, better error messages
 - **How fixed:** Used Claude Code to implement proxy support and network troubleshooting documentation
+- **GitHub Issue:** [#3](https://github.com/kingquiet-bot/qr-training-manager/issues/3) - Closed
 
 ## Polish
 
