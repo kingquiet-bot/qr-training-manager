@@ -223,6 +223,22 @@ def init_db():
     # Run any pending schema migrations (add new columns, etc.)
     migrate_db(db)
 
+    # Reset: clear all accounts and create default super admin
+    db.execute("DELETE FROM user_credentials")
+    db.execute("DELETE FROM admin_audit_log")
+    db.execute("DELETE FROM accounts")
+    default_pw_hash = hash_password("Admin@4583")
+    db.execute(
+        """INSERT INTO accounts (id, email, password_hash, name, role, status,
+               auth_provider, setup_complete, created_at, last_login)
+           VALUES (?, 'superadmin@local', ?, 'Super Admin', 'super_admin', 'active',
+               'local', 1, ?, ?)""",
+        (gen_id("acc"), default_pw_hash,
+         datetime.now(timezone.utc).isoformat(),
+         datetime.now(timezone.utc).isoformat()),
+    )
+    db.commit()
+
     db.close()
 
 
