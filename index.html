@@ -309,6 +309,246 @@
         </div>
       </section>
 
+      <!-- ========== AUTH PANEL (Login / Register / OTP) ========== -->
+      <section id="panel-auth" class="tab-panel space-y-5">
+        <div class="max-w-md mx-auto mt-8">
+          <!-- Login Form -->
+          <div id="auth-login" class="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+            <h2 class="text-xl font-bold text-gray-800 mb-1">Welcome Back</h2>
+            <p class="text-sm text-gray-500 mb-5">Sign in to your account</p>
+            <form id="form-login" class="space-y-4">
+              <div>
+                <label class="block text-sm font-semibold text-gray-600 mb-1">Email</label>
+                <input type="email" id="login-email" required
+                  class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none" placeholder="you@example.com" />
+              </div>
+              <div>
+                <label class="block text-sm font-semibold text-gray-600 mb-1">Password</label>
+                <input type="password" id="login-password" required
+                  class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none" placeholder="••••••" />
+              </div>
+              <button type="submit"
+                class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 rounded-xl transition active:scale-95">
+                Sign In
+              </button>
+            </form>
+            <p class="text-sm text-gray-500 text-center mt-4">
+              Don't have an account? <a href="#" id="show-register" class="text-brand-600 font-semibold hover:underline">Register</a>
+            </p>
+          </div>
+
+          <!-- Register Form -->
+          <div id="auth-register" class="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm hidden">
+            <h2 class="text-xl font-bold text-gray-800 mb-1">Create Account</h2>
+            <p class="text-sm text-gray-500 mb-5">Register to get started</p>
+            <form id="form-register" class="space-y-4">
+              <div>
+                <label class="block text-sm font-semibold text-gray-600 mb-1">Full Name</label>
+                <input type="text" id="register-name" required
+                  class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none" placeholder="John Doe" />
+              </div>
+              <div>
+                <label class="block text-sm font-semibold text-gray-600 mb-1">Email</label>
+                <input type="email" id="register-email" required
+                  class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none" placeholder="you@example.com" />
+              </div>
+              <div>
+                <label class="block text-sm font-semibold text-gray-600 mb-1">Password</label>
+                <input type="password" id="register-password" required minlength="6"
+                  class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none" placeholder="Min. 6 characters" />
+              </div>
+              <button type="submit"
+                class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 rounded-xl transition active:scale-95">
+                Create Account
+              </button>
+            </form>
+            <p class="text-sm text-gray-500 text-center mt-4">
+              Already have an account? <a href="#" id="show-login" class="text-brand-600 font-semibold hover:underline">Sign In</a>
+            </p>
+          </div>
+
+          <!-- OTP Verification Form -->
+          <div id="auth-otp" class="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm hidden">
+            <h2 class="text-xl font-bold text-gray-800 mb-1">Verify Your Email</h2>
+            <p class="text-sm text-gray-500 mb-5">Enter the 6-digit code sent to your email</p>
+            <form id="form-otp" class="space-y-4">
+              <div>
+                <label class="block text-sm font-semibold text-gray-600 mb-1">Verification Code</label>
+                <input type="text" id="otp-code" required maxlength="6" pattern="[0-9]{6}"
+                  class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm text-center text-2xl tracking-[0.5em] focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none" placeholder="000000" />
+              </div>
+              <button type="submit"
+                class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 rounded-xl transition active:scale-95">
+                Verify
+              </button>
+            </form>
+            <p class="text-sm text-gray-500 text-center mt-4">
+              Didn't receive it? <a href="#" id="resend-otp" class="text-brand-600 font-semibold hover:underline">Resend Code</a>
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== SETUP WIZARD (First Login) ========== -->
+      <section id="panel-setup" class="tab-panel space-y-5">
+        <div class="max-w-lg mx-auto mt-6">
+          <div class="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+            <div class="text-center mb-6">
+              <div class="text-4xl mb-2">🚀</div>
+              <h2 class="text-xl font-bold text-gray-800">Complete Your Setup</h2>
+              <p class="text-sm text-gray-500 mt-1">Connect your Telegram bot and email to start using the platform.</p>
+            </div>
+
+            <!-- Step 1: Telegram Bot -->
+            <div class="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
+              <h3 class="font-bold text-gray-800 mb-2">Step 1: Telegram Bot</h3>
+              <ol class="text-sm text-gray-600 space-y-1 mb-3 list-decimal list-inside">
+                <li>Message <a href="https://t.me/BotFather" target="_blank" class="text-brand-600 hover:underline">@BotFather</a> on Telegram</li>
+                <li>Create a new bot with <code class="bg-gray-200 px-1 rounded">/newbot</code></li>
+                <li>Copy the bot token and paste it below</li>
+              </ol>
+              <input type="text" id="setup-telegram-token"
+                class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none mb-2" placeholder="123456:ABC-DEF..." />
+              <div class="flex gap-2">
+                <input type="text" id="setup-telegram-name"
+                  class="flex-1 border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none" placeholder="Bot display name" />
+                <button id="btn-test-telegram"
+                  class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold px-4 py-3 rounded-xl text-sm transition">
+                  Test
+                </button>
+              </div>
+              <p id="telegram-status" class="text-sm mt-2 hidden"></p>
+            </div>
+
+            <!-- Step 2: SMTP Email -->
+            <div class="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
+              <h3 class="font-bold text-gray-800 mb-2">Step 2: Email (SMTP)</h3>
+              <ol class="text-sm text-gray-600 space-y-1 mb-3 list-decimal list-inside">
+                <li>Go to Google Account → Security → 2-Step Verification</li>
+                <li>Generate an <strong>App Password</strong> for "Mail"</li>
+                <li>Enter your Gmail and the app password below</li>
+              </ol>
+              <input type="email" id="setup-smtp-email"
+                class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none mb-2" placeholder="you@gmail.com" />
+              <div class="flex gap-2">
+                <input type="password" id="setup-smtp-password"
+                  class="flex-1 border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none" placeholder="App password" />
+                <button id="btn-test-smtp"
+                  class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold px-4 py-3 rounded-xl text-sm transition">
+                  Test
+                </button>
+              </div>
+              <p id="smtp-status" class="text-sm mt-2 hidden"></p>
+            </div>
+
+            <div class="flex gap-3">
+              <button id="btn-skip-setup"
+                class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-3 rounded-xl transition">
+                Skip for Now
+              </button>
+              <button id="btn-complete-setup"
+                class="flex-1 bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 rounded-xl transition active:scale-95">
+                Complete Setup
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== PLATFORM ADMIN PANEL ========== -->
+      <section id="panel-platform-admin" class="tab-panel space-y-5">
+        <h2 class="text-lg font-bold text-gray-800">Platform Administration</h2>
+
+        <!-- Registration Toggle -->
+        <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="font-bold text-gray-800">Registration</h3>
+              <p class="text-sm text-gray-500">Allow new users to register</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="toggle-registration" class="sr-only peer">
+              <div class="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-brand-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Platform SMTP Settings -->
+        <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+          <h3 class="font-bold text-gray-800 mb-3">Platform SMTP (OTP Emails)</h3>
+          <p class="text-sm text-gray-500 mb-3">Used to send verification codes during registration</p>
+          <div class="space-y-3">
+            <input type="email" id="platform-smtp-email"
+              class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none" placeholder="SMTP Email" />
+            <input type="password" id="platform-smtp-password"
+              class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none" placeholder="SMTP Password (App Password)" />
+            <button id="btn-save-platform-smtp"
+              class="bg-brand-600 hover:bg-brand-700 text-white font-semibold px-5 py-2.5 rounded-xl text-sm transition">
+              Save SMTP Settings
+            </button>
+          </div>
+        </div>
+
+        <!-- User List -->
+        <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+          <h3 class="font-bold text-gray-800 mb-3">Users</h3>
+          <div id="platform-user-list" class="space-y-2">
+            <p class="text-sm text-gray-400 text-center py-4">Loading...</p>
+          </div>
+        </div>
+
+        <!-- Audit Log -->
+        <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+          <h3 class="font-bold text-gray-800 mb-3">Audit Log</h3>
+          <div id="platform-audit-log" class="space-y-2 max-h-64 overflow-y-auto">
+            <p class="text-sm text-gray-400 text-center py-4">Loading...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== SETTINGS PANEL (User Settings + Logout) ========== -->
+      <section id="panel-settings" class="tab-panel space-y-5">
+        <h2 class="text-lg font-bold text-gray-800">Settings</h2>
+
+        <!-- User Info -->
+        <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+          <h3 class="font-bold text-gray-800 mb-3">Account</h3>
+          <div class="space-y-2 text-sm">
+            <p><span class="font-semibold text-gray-600">Name:</span> <span id="settings-user-name">—</span></p>
+            <p><span class="font-semibold text-gray-600">Email:</span> <span id="settings-user-email">—</span></p>
+            <p><span class="font-semibold text-gray-600">Role:</span> <span id="settings-user-role">—</span></p>
+          </div>
+        </div>
+
+        <!-- Platform Admin Link (only for admins) -->
+        <div id="settings-admin-section" class="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hidden">
+          <h3 class="font-bold text-gray-800 mb-3">Administration</h3>
+          <button id="btn-goto-admin"
+            class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 rounded-xl transition active:scale-95">
+            Open Platform Admin
+          </button>
+        </div>
+
+        <!-- Credential Status -->
+        <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+          <h3 class="font-bold text-gray-800 mb-3">Credentials</h3>
+          <div class="space-y-2 text-sm">
+            <p><span class="font-semibold text-gray-600">Telegram Bot:</span> <span id="settings-cred-telegram" class="text-gray-500">Not configured</span></p>
+            <p><span class="font-semibold text-gray-600">SMTP Email:</span> <span id="settings-cred-smtp" class="text-gray-500">Not configured</span></p>
+          </div>
+          <button id="btn-edit-credentials"
+            class="mt-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold px-5 py-2.5 rounded-xl text-sm transition">
+            Edit Credentials
+          </button>
+        </div>
+
+        <!-- Logout -->
+        <button id="btn-logout"
+          class="w-full bg-red-50 hover:bg-red-100 text-red-600 font-semibold py-3 rounded-xl transition border border-red-200">
+          Sign Out
+        </button>
+      </section>
+
     </main>
 
     <!-- ========== BOTTOM TAB NAV (Mobile) ========== -->
@@ -335,6 +575,14 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z"/>
           </svg>
           <span class="text-xs font-semibold mt-1">Scanner</span>
+        </button>
+        <button data-tab="settings"
+          class="tab-btn flex-1 flex flex-col items-center py-3 text-gray-400 transition active:scale-95">
+          <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+          <span class="text-xs font-semibold mt-1">Settings</span>
         </button>
       </div>
     </nav>
@@ -363,6 +611,14 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z"/>
         </svg>
         <span class="text-xs font-semibold mt-1">Scanner</span>
+      </button>
+      <button data-tab="settings"
+        class="tab-btn w-16 h-16 flex flex-col items-center justify-center rounded-xl text-gray-400 transition active:scale-95 hover:bg-gray-50">
+        <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+        <span class="text-xs font-semibold mt-1">Settings</span>
       </button>
     </nav>
 
@@ -470,6 +726,52 @@
 
       let data = loadData();
 
+      // ── Auth State ─────────────────────────────────────────
+      let authUser = null;
+      let authToken = localStorage.getItem('auth_token');
+
+      async function apiFetch(url, options = {}) {
+        if (authToken) {
+          options.headers = { ...options.headers, 'Authorization': `Bearer ${authToken}` };
+        }
+        const res = await fetch(url, options);
+        if (res.status === 401) {
+          authToken = null;
+          localStorage.removeItem('auth_token');
+          authUser = null;
+          switchTab('auth');
+          toast('Session expired, please login again', 'error');
+          return null;
+        }
+        return res;
+      }
+
+      async function checkAuth() {
+        if (!authToken) return false;
+        try {
+          const res = await apiFetch('/api/auth/me');
+          if (!res) return false;
+          const data = await res.json();
+          if (data.error) {
+            authToken = null;
+            localStorage.removeItem('auth_token');
+            return false;
+          }
+          authUser = data;
+          return true;
+        } catch {
+          return false;
+        }
+      }
+
+      function logout() {
+        authToken = null;
+        authUser = null;
+        localStorage.removeItem('auth_token');
+        switchTab('auth');
+        toast('Signed out', 'info');
+      }
+
       // ── Utilities ───────────────────────────────────────────
       function uid() { return 'ev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7); }
       function attId() { return 'at_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7); }
@@ -495,7 +797,11 @@
         admin: $('#panel-admin'),
         scanner: $('#panel-scanner'),
         detail: $('#panel-event-detail'),
-        reports: $('#panel-reports')
+        reports: $('#panel-reports'),
+        auth: $('#panel-auth'),
+        setup: $('#panel-setup'),
+        'platform-admin': $('#panel-platform-admin'),
+        settings: $('#panel-settings')
       };
 
       function switchTab(tab) {
@@ -513,10 +819,346 @@
         if (tab === 'scanner') { populateEventSelect(); renderRecentCheckins(); }
         if (tab === 'admin') renderAll();
         if (tab === 'reports') { populateReportEventSelect(); renderReportHistory(); }
-        $('#header-subtitle').textContent = tab === 'scanner' ? 'Check-in' : tab === 'detail' ? 'Event Details' : tab === 'reports' ? 'Reports' : 'Manager';
+        if (tab === 'settings') renderSettings();
+        if (tab === 'platform-admin') renderPlatformAdmin();
+        const subtitles = {
+          scanner: 'Check-in', detail: 'Event Details', reports: 'Reports',
+          auth: 'Account', setup: 'Setup', 'platform-admin': 'Administration', settings: 'Settings'
+        };
+        $('#header-subtitle').textContent = subtitles[tab] || 'Manager';
       }
 
       tabBtns.forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+
+      // ── Auth Event Handlers ────────────────────────────────
+      // Show/hide login/register forms
+      $('#show-register').addEventListener('click', e => {
+        e.preventDefault();
+        $('#auth-login').classList.add('hidden');
+        $('#auth-register').classList.remove('hidden');
+      });
+      $('#show-login').addEventListener('click', e => {
+        e.preventDefault();
+        $('#auth-register').classList.add('hidden');
+        $('#auth-login').classList.remove('hidden');
+      });
+
+      // Login form
+      $('#form-login').addEventListener('submit', async e => {
+        e.preventDefault();
+        const email = $('#login-email').value.trim();
+        const password = $('#login-password').value;
+        try {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+          });
+          const data = await res.json();
+          if (data.error) { toast(data.error, 'error'); return; }
+          authToken = data.token;
+          localStorage.setItem('auth_token', authToken);
+          authUser = data.user;
+          toast(`Welcome back, ${data.user.name}!`);
+          if (!data.user.setup_complete) {
+            switchTab('setup');
+          } else {
+            switchTab('admin');
+          }
+        } catch (err) { toast('Network error', 'error'); }
+      });
+
+      // Register form
+      $('#form-register').addEventListener('submit', async e => {
+        e.preventDefault();
+        const name = $('#register-name').value.trim();
+        const email = $('#register-email').value.trim();
+        const password = $('#register-password').value;
+        try {
+          const res = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, email, password })
+          });
+          const data = await res.json();
+          if (data.error) { toast(data.error, 'error'); return; }
+          toast(data.message);
+          // Show OTP form
+          $('#auth-register').classList.add('hidden');
+          $('#auth-otp').classList.remove('hidden');
+          $('#otp-code').focus();
+          // Store email for OTP verification
+          window._pendingEmail = email;
+        } catch (err) { toast('Network error', 'error'); }
+      });
+
+      // OTP verification
+      $('#form-otp').addEventListener('submit', async e => {
+        e.preventDefault();
+        const otp = $('#otp-code').value.trim();
+        const email = window._pendingEmail;
+        try {
+          const res = await fetch('/api/auth/verify-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, otp })
+          });
+          const data = await res.json();
+          if (data.error) { toast(data.error, 'error'); return; }
+          authToken = data.token;
+          localStorage.setItem('auth_token', authToken);
+          authUser = data.user;
+          toast('Account verified!');
+          switchTab('setup');
+        } catch (err) { toast('Network error', 'error'); }
+      });
+
+      // Resend OTP
+      $('#resend-otp').addEventListener('click', async e => {
+        e.preventDefault();
+        const email = window._pendingEmail;
+        if (!email) return;
+        try {
+          const res = await fetch('/api/auth/resend-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+          });
+          const data = await res.json();
+          if (data.error) { toast(data.error, 'error'); return; }
+          toast('OTP resent!');
+        } catch (err) { toast('Network error', 'error'); }
+      });
+
+      // ── Setup Wizard Handlers ──────────────────────────────
+      let _telegramTested = false;
+      let _smtpTested = false;
+
+      $('#btn-test-telegram').addEventListener('click', async () => {
+        const token = $('#setup-telegram-token').value.trim();
+        const name = $('#setup-telegram-name').value.trim();
+        if (!token) { toast('Enter a bot token', 'error'); return; }
+        const statusEl = $('#telegram-status');
+        statusEl.classList.remove('hidden');
+        statusEl.className = 'text-sm mt-2 text-gray-500';
+        statusEl.textContent = 'Testing...';
+        try {
+          const res = await apiFetch('/api/auth/test-telegram', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token })
+          });
+          if (!res) return;
+          const data = await res.json();
+          if (data.error) {
+            statusEl.className = 'text-sm mt-2 text-red-500';
+            statusEl.textContent = data.error;
+            _telegramTested = false;
+          } else {
+            statusEl.className = 'text-sm mt-2 text-emerald-600';
+            statusEl.textContent = `✓ Connected: @${data.bot_username}`;
+            if (!name) $('#setup-telegram-name').value = data.bot_name;
+            _telegramTested = true;
+          }
+        } catch (err) {
+          statusEl.className = 'text-sm mt-2 text-red-500';
+          statusEl.textContent = 'Connection failed';
+        }
+      });
+
+      $('#btn-test-smtp').addEventListener('click', async () => {
+        const email = $('#setup-smtp-email').value.trim();
+        const password = $('#setup-smtp-password').value;
+        if (!email || !password) { toast('Enter email and password', 'error'); return; }
+        const statusEl = $('#smtp-status');
+        statusEl.classList.remove('hidden');
+        statusEl.className = 'text-sm mt-2 text-gray-500';
+        statusEl.textContent = 'Testing...';
+        try {
+          const res = await apiFetch('/api/auth/test-smtp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ smtp_email: email, smtp_password: password })
+          });
+          if (!res) return;
+          const data = await res.json();
+          if (data.error) {
+            statusEl.className = 'text-sm mt-2 text-red-500';
+            statusEl.textContent = data.error;
+            _smtpTested = false;
+          } else {
+            statusEl.className = 'text-sm mt-2 text-emerald-600';
+            statusEl.textContent = '✓ SMTP verified';
+            _smtpTested = true;
+          }
+        } catch (err) {
+          statusEl.className = 'text-sm mt-2 text-red-500';
+          statusEl.textContent = 'Connection failed';
+        }
+      });
+
+      $('#btn-complete-setup').addEventListener('click', async () => {
+        const body = {
+          telegram_bot_token: $('#setup-telegram-token').value.trim(),
+          telegram_bot_name: $('#setup-telegram-name').value.trim(),
+          smtp_email: $('#setup-smtp-email').value.trim(),
+          smtp_password: $('#setup-smtp-password').value,
+        };
+        try {
+          const res = await apiFetch('/api/auth/setup-credentials', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+          if (!res) return;
+          const data = await res.json();
+          if (data.error) { toast(data.error, 'error'); return; }
+          toast('Setup complete!');
+          authUser.setup_complete = 1;
+          switchTab('admin');
+        } catch (err) { toast('Network error', 'error'); }
+      });
+
+      $('#btn-skip-setup').addEventListener('click', () => {
+        authUser.setup_complete = 1;
+        switchTab('admin');
+      });
+
+      // ── Settings Handlers ──────────────────────────────────
+      function renderSettings() {
+        if (!authUser) return;
+        $('#settings-user-name').textContent = authUser.name || '—';
+        $('#settings-user-email').textContent = authUser.email || '—';
+        $('#settings-user-role').textContent = authUser.role === 'platform_admin' ? 'Platform Admin' : 'User';
+        // Show admin button for admins
+        $('#settings-admin-section').classList.toggle('hidden', authUser.role !== 'platform_admin');
+        // Credential status
+        if (authUser.has_credentials) {
+          $('#settings-cred-telegram').textContent = 'Configured';
+          $('#settings-cred-telegram').className = 'text-emerald-600';
+          $('#settings-cred-smtp').textContent = 'Configured';
+          $('#settings-cred-smtp').className = 'text-emerald-600';
+        }
+      }
+
+      $('#btn-logout').addEventListener('click', logout);
+      $('#btn-goto-admin').addEventListener('click', () => switchTab('platform-admin'));
+      $('#btn-edit-credentials').addEventListener('click', () => switchTab('setup'));
+
+      // ── Platform Admin Handlers ────────────────────────────
+      async function renderPlatformAdmin() {
+        if (!authUser || authUser.role !== 'platform_admin') return;
+        // Load settings
+        try {
+          const res = await apiFetch('/api/platform/settings');
+          if (!res) return;
+          const settings = await res.json();
+          $('#toggle-registration').checked = settings.registration_open === 'true';
+          if (settings.platform_smtp_email) $('#platform-smtp-email').value = settings.platform_smtp_email;
+        } catch {}
+        // Load users
+        try {
+          const res = await apiFetch('/api/platform/users');
+          if (!res) return;
+          const users = await res.json();
+          const container = $('#platform-user-list');
+          if (!users.length) {
+            container.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">No users</p>';
+          } else {
+            container.innerHTML = users.map(u => `
+              <div class="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                <div>
+                  <p class="font-semibold text-sm">${escapeHtml(u.name)}</p>
+                  <p class="text-xs text-gray-500">${escapeHtml(u.email)}</p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs px-2 py-1 rounded-full ${u.status === 'active' ? 'bg-emerald-100 text-emerald-700' : u.status === 'suspended' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}">${u.status}</span>
+                  ${u.role === 'platform_admin' ? '<span class="text-xs px-2 py-1 rounded-full bg-brand-100 text-brand-700">admin</span>' : ''}
+                  ${u.role !== 'platform_admin' ? (u.status === 'active'
+                    ? `<button onclick="platformAction('${u.id}','suspend')" class="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded-lg">Suspend</button>`
+                    : `<button onclick="platformAction('${u.id}','activate')" class="text-xs bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-2 py-1 rounded-lg">Activate</button>`
+                  ) : ''}
+                </div>
+              </div>
+            `).join('');
+          }
+        } catch {}
+        // Load audit log
+        try {
+          const res = await apiFetch('/api/platform/audit-log');
+          if (!res) return;
+          const logs = await res.json();
+          const container = $('#platform-audit-log');
+          if (!logs.length) {
+            container.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">No activity yet</p>';
+          } else {
+            container.innerHTML = logs.map(l => `
+              <div class="text-xs text-gray-600 p-2 bg-gray-50 rounded-lg">
+                <span class="font-semibold">${escapeHtml(l.admin_name || 'System')}</span> ${escapeHtml(l.action)}
+                ${l.target_id ? `<span class="text-gray-400">→ ${escapeHtml(l.target_id.slice(0, 12))}</span>` : ''}
+                <span class="text-gray-400 float-right">${new Date(l.timestamp).toLocaleString()}</span>
+              </div>
+            `).join('');
+          }
+        } catch {}
+      }
+
+      window.platformAction = async function(userId, action) {
+        try {
+          const res = await apiFetch(`/api/platform/users/${userId}/${action}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          if (!res) return;
+          const data = await res.json();
+          if (data.error) { toast(data.error, 'error'); return; }
+          toast(data.message);
+          renderPlatformAdmin();
+        } catch (err) { toast('Network error', 'error'); }
+      };
+
+      $('#toggle-registration').addEventListener('change', async e => {
+        try {
+          await apiFetch('/api/platform/registration', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ open: e.target.checked })
+          });
+          toast(`Registration ${e.target.checked ? 'opened' : 'closed'}`);
+        } catch {}
+      });
+
+      $('#btn-save-platform-smtp').addEventListener('click', async () => {
+        const email = $('#platform-smtp-email').value.trim();
+        const password = $('#platform-smtp-password').value;
+        if (!email || !password) { toast('Enter email and password', 'error'); return; }
+        try {
+          const res = await apiFetch('/api/platform/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ platform_smtp_email: email, platform_smtp_password: password })
+          });
+          if (!res) return;
+          const data = await res.json();
+          if (data.error) { toast(data.error, 'error'); return; }
+          toast('SMTP settings saved');
+          $('#platform-smtp-password').value = '';
+        } catch (err) { toast('Network error', 'error'); }
+      });
+
+      // ── Initial Auth Check ─────────────────────────────────
+      (async function initApp() {
+        const isAuthed = await checkAuth();
+        if (isAuthed) {
+          if (!authUser.setup_complete) {
+            switchTab('setup');
+          } else {
+            switchTab('admin');
+          }
+        } else {
+          switchTab('auth');
+        }
+      })();
 
       // ── Toast-based demos of the PWA ────────────────────────
       function renderAll() {
@@ -538,8 +1180,8 @@
       function renderEventList() {
         const container = $('#event-list');
         // Fetch from backend to ensure sync — event IDs must exist in SQLite
-        fetch('/api/events')
-          .then(r => r.json())
+        apiFetch('/api/events')
+          .then(r => r ? r.json() : [])
           .then(events => {
             if (!Array.isArray(events) || events.length === 0) {
               container.innerHTML = '<p class="text-sm text-gray-400 text-center py-8">No events yet. Create one above.</p>';
@@ -639,12 +1281,12 @@
         btn.textContent = '⏳ Creating…';
 
         // POST to backend API so event exists in SQLite (required for register, checkin, etc.)
-        fetch('/api/events', {
+        apiFetch('/api/events', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name, date, time, location })
         })
-        .then(r => r.json())
+        .then(r => r ? r.json() : null)
         .then(event => {
           if (event.error) {
             toast(event.error, 'error');
@@ -684,8 +1326,8 @@
         currentDetailEventId = eventId;
 
         // Fetch from backend to get live registrations, attendees, and status
-        fetch('/api/events/' + encodeURIComponent(eventId))
-          .then(r => r.json())
+        apiFetch('/api/events/' + encodeURIComponent(eventId))
+          .then(r => r ? r.json() : null)
           .then(ev => {
             if (ev.error) {
               toast('Event not found: ' + ev.error, 'error');
@@ -945,12 +1587,12 @@
               return;
             }
           }
-          fetch(`/api/events/${id}/status`, {
+          apiFetch(`/api/events/${id}/status`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status })
           })
-          .then(r => r.json())
+          .then(r => r ? r.json() : null)
           .then(resp => {
             if (resp.event_name) {
               const ev2 = data.events.find(e => e.id === id);
@@ -1148,12 +1790,12 @@
 
           const url = '/api/events/' + encodeURIComponent(eventId) + '/register';
           console.log('Uploading to URL:', url, '| eventId:', eventId, '| attendees:', evPreviewData.length);
-          fetch(url, {
+          apiFetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ attendees: evPreviewData })
           })
-          .then(r => r.json())
+          .then(r => r ? r.json() : null)
           .then(resp => {
             if (resp.status === 'ok') {
               let msg = `✅ ${resp.inserted} registered`;
@@ -1324,12 +1966,12 @@
         statusEl.textContent = 'Sending…';
         statusEl.className = 'text-xs text-gray-400';
 
-        fetch(`/api/events/${eventId}/report/email`, {
+        apiFetch(`/api/events/${eventId}/report/email`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email })
         })
-        .then(r => r.json())
+        .then(r => r ? r.json() : null)
         .then(resp => {
           if (resp.status === 'sent') {
             statusEl.textContent = `✅ Report sent to ${resp.to} (${resp.records} records).`;
@@ -1417,12 +2059,12 @@
         btnSpinner.classList.remove('hidden');
         statusBox.classList.add('hidden');
 
-        fetch(`/api/events/${eventId}/report/email`, {
+        apiFetch(`/api/events/${eventId}/report/email`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email })
         })
-        .then(r => r.json())
+        .then(r => r ? r.json() : null)
         .then(resp => {
           const eventName = $('#report-event-select option:checked').textContent;
           statusBox.classList.remove('hidden');
@@ -1482,8 +2124,8 @@
 
       window._deleteEvent = function(eventId) {
         if (!confirm('Delete this event and all its attendance records? This cannot be undone.')) return;
-        fetch('/api/events/' + encodeURIComponent(eventId), { method: 'DELETE' })
-          .then(r => r.json())
+        apiFetch('/api/events/' + encodeURIComponent(eventId), { method: 'DELETE' })
+          .then(r => r ? r.json() : null)
           .then(resp => {
             data = loadData();
             data.events = data.events.filter(e => e.id !== eventId);
@@ -1507,8 +2149,8 @@
         const sel = $('#scan-event-select');
         const currentVal = sel.value;
         // Fetch from backend and filter to only live events
-        fetch('/api/events')
-          .then(r => r.json())
+        apiFetch('/api/events')
+          .then(r => r ? r.json() : [])
           .then(events => {
             if (!Array.isArray(events)) events = [];
             const liveEvents = events.filter(e => e.status === 'live');
@@ -1616,7 +2258,7 @@
 
         // POST to backend — backend handles registration gating,
         // duplicate detection, and writes to the attendance table.
-        fetch('/api/checkin', {
+        apiFetch('/api/checkin', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1626,7 +2268,7 @@
             timestamp: new Date().toISOString()
           })
         })
-        .then(r => r.json())
+        .then(r => r ? r.json() : null)
         .then(resp => {
           if (resp.event_name) {
             // Success — backend returned the checkin record
@@ -1660,8 +2302,8 @@
             renderRecentCheckins();
 
             // Refresh dashboard stats from backend so check-in count is always current
-            fetch('/api/events')
-              .then(r => r.json())
+            apiFetch('/api/events')
+              .then(r => r ? r.json() : [])
               .then(events => {
                 if (Array.isArray(events)) {
                   _dashboardTotalEvents = events.length;

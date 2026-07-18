@@ -26,10 +26,18 @@ import uuid
 import io
 import csv
 import smtplib
+import random
+import string
+import time
 from email.message import EmailMessage
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
+
+import bcrypt
+import jwt
+
+from crypto_utils import encrypt, decrypt
 
 # ── Configuration ──────────────────────────────────────────────
 HOST = "0.0.0.0"
@@ -65,12 +73,59 @@ def migrate_db(db):
 
 
 def init_db():
-    """Create tables if they don't exist; seed demo users."""
+    """Create tables if they don't exist; wipe fresh for multi-tenant."""
+    # Wipe fresh — delete old database for clean multi-tenant start
+    if os.path.isfile(DATABASE):
+        os.remove(DATABASE)
+
     db = sqlite3.connect(DATABASE)
     db.execute("PRAGMA journal_mode=WAL")
     db.execute("PRAGMA foreign_keys=ON")
 
     db.executescript("""
+        -- ── Auth & Multi-Tenant Tables ──────────────────────
+
+        CREATE TABLE IF NOT EXISTS accounts (
+            id            TEXT PRIMARY KEY,
+            email         TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            name          TEXT NOT NULL,
+            role          TEXT DEFAULT 'user',
+            status        TEXT DEFAULT 'pending',
+            otp_code      TEXT,
+            otp_expires   TEXT,
+            setup_complete INTEGER DEFAULT 0,
+            created_at    TEXT NOT NULL,
+            last_login    TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS user_credentials (
+            account_id         TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+            telegram_bot_token TEXT DEFAULT '',
+            telegram_bot_name  TEXT DEFAULT '',
+            smtp_email         TEXT DEFAULT '',
+            smtp_password      TEXT DEFAULT '',
+            smtp_server        TEXT DEFAULT 'smtp.gmail.com',
+            smtp_port          INTEGER DEFAULT 587,
+            verified_at        TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS platform_settings (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS admin_audit_log (
+            id        TEXT PRIMARY KEY,
+            admin_id  TEXT NOT NULL,
+            action    TEXT NOT NULL,
+            target_id TEXT,
+            details   TEXT,
+            timestamp TEXT NOT NULL
+        );
+
+        -- ── Core Tables ─────────────────────────────────────
+
         CREATE TABLE IF NOT EXISTS events (
             id          TEXT PRIMARY KEY,
             name        TEXT NOT NULL,
@@ -79,15 +134,19 @@ def init_db():
             location    TEXT DEFAULT '',
             description TEXT DEFAULT '',
             status      TEXT NOT NULL DEFAULT 'upcoming',
-            created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+            owner_id    TEXT,
+            created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (owner_id) REFERENCES accounts(id) ON DELETE SET NULL
         );
 
         CREATE TABLE IF NOT EXISTS users (
-            id      TEXT PRIMARY KEY,
-            pin     TEXT NOT NULL UNIQUE,
-            name    TEXT NOT NULL,
-            dept    TEXT DEFAULT '',
-            active  INTEGER DEFAULT 1
+            id       TEXT PRIMARY KEY,
+            pin      TEXT NOT NULL UNIQUE,
+            name     TEXT NOT NULL,
+            dept     TEXT DEFAULT '',
+            active   INTEGER DEFAULT 1,
+            owner_id TEXT,
+            FOREIGN KEY (owner_id) REFERENCES accounts(id) ON DELETE SET NULL
         );
 
         CREATE TABLE IF NOT EXISTS attendance (
@@ -107,7 +166,9 @@ def init_db():
             dept      TEXT DEFAULT '',
             phone     TEXT DEFAULT '',
             status    TEXT NOT NULL DEFAULT 'registered',
-            FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+            owner_id  TEXT,
+            FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+            FOREIGN KEY (owner_id) REFERENCES accounts(id) ON DELETE SET NULL
         );
 
         CREATE TABLE IF NOT EXISTS active_qr_list (
@@ -124,29 +185,30 @@ def init_db():
             timestamp       TEXT NOT NULL DEFAULT (datetime('now'))
         );
 
-        CREATE INDEX IF NOT EXISTS idx_att_event   ON attendance(event_id);
-        CREATE INDEX IF NOT EXISTS idx_att_emp     ON attendance(emp_code);
-        CREATE INDEX IF NOT EXISTS idx_att_ts      ON attendance(timestamp);
-        CREATE INDEX IF NOT EXISTS idx_reg_event   ON registered_attendees(event_id);
-        CREATE INDEX IF NOT EXISTS idx_reg_emp     ON registered_attendees(emp_code);
-        CREATE INDEX IF NOT EXISTS idx_hist_emp    ON attendance_history(emp_id);
-        CREATE INDEX IF NOT EXISTS idx_hist_ts     ON attendance_history(timestamp);
+        -- ── Indexes ─────────────────────────────────────────
+
+        CREATE INDEX IF NOT EXISTS idx_att_event     ON attendance(event_id);
+        CREATE INDEX IF NOT EXISTS idx_att_emp       ON attendance(emp_code);
+        CREATE INDEX IF NOT EXISTS idx_att_ts        ON attendance(timestamp);
+        CREATE INDEX IF NOT EXISTS idx_reg_event     ON registered_attendees(event_id);
+        CREATE INDEX IF NOT EXISTS idx_reg_emp       ON registered_attendees(emp_code);
+        CREATE INDEX IF NOT EXISTS idx_hist_emp      ON attendance_history(emp_id);
+        CREATE INDEX IF NOT EXISTS idx_hist_ts       ON attendance_history(timestamp);
+        CREATE INDEX IF NOT EXISTS idx_events_owner  ON events(owner_id);
+        CREATE INDEX IF NOT EXISTS idx_users_owner   ON users(owner_id);
+        CREATE INDEX IF NOT EXISTS idx_accounts_email ON accounts(email);
     """)
 
-    migrate_db(db)  # catch up existing databases
-
-    demo_users = [
-        ("U001", "1001", "Alice Johnson", "Engineering"),
-        ("U002", "1002", "Bob Martinez",  "HR"),
-        ("U003", "1003", "Carol Nguyen",  "Operations"),
-        ("U004", "1004", "David Kim",     "Engineering"),
-        ("U005", "1005", "Eva Patel",     "Finance"),
-        ("U006", "2001", "Frank Okafor",  "Safety"),
-        ("U007", "2002", "Grace Li",      "Safety"),
-    ]
+    # Seed default platform settings
     db.executemany(
-        "INSERT OR IGNORE INTO users (id, pin, name, dept) VALUES (?, ?, ?, ?)",
-        demo_users,
+        "INSERT OR IGNORE INTO platform_settings (key, value) VALUES (?, ?)",
+        [
+            ("registration_open", "true"),
+            ("platform_smtp_email", os.environ.get("SMTP_EMAIL", "")),
+            ("platform_smtp_password", encrypt(os.environ.get("SMTP_PASSWORD", "")) if os.environ.get("SMTP_PASSWORD") else ""),
+            ("platform_smtp_server", "smtp.gmail.com"),
+            ("platform_smtp_port", "587"),
+        ],
     )
     db.commit()
     db.close()
@@ -173,7 +235,7 @@ def json_response(handler, data, status=200):
     handler.send_header("Content-Length", str(len(body)))
     handler.send_header("Access-Control-Allow-Origin", "*")
     handler.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-    handler.send_header("Access-Control-Allow-Headers", "Content-Type")
+    handler.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
     handler.end_headers()
     handler.wfile.write(body)
 
@@ -190,6 +252,139 @@ def read_json_body(handler):
         return {}
 
 
+# ── Auth Helpers ──────────────────────────────────────────────
+
+JWT_SECRET = os.environ.get("MASTER_SECRET", "dev-fallback-secret-change-me")
+JWT_EXPIRY_HOURS = 24
+OTP_EXPIRY_MINUTES = 5
+OTP_MAX_ATTEMPTS = 5
+
+
+def hash_password(password: str) -> str:
+    """Hash a password with bcrypt."""
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12)).decode()
+
+
+def check_password(password: str, hashed: str) -> bool:
+    """Verify a password against a bcrypt hash."""
+    return bcrypt.checkpw(password.encode(), hashed.encode())
+
+
+def create_token(account_id: str, role: str) -> str:
+    """Create a JWT token for an account."""
+    payload = {
+        "sub": account_id,
+        "role": role,
+        "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRY_HOURS),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+
+
+def verify_jwt(token: str):
+    """Verify a JWT token and return the account dict, or None."""
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        db = get_db()
+        try:
+            user = db.execute(
+                "SELECT id, email, name, role, status, setup_complete FROM accounts WHERE id = ?",
+                (payload["sub"],),
+            ).fetchone()
+            return dict(user) if user else None
+        finally:
+            db.close()
+    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
+        return None
+
+
+def extract_token(handler) -> str:
+    """Extract Bearer token from Authorization header."""
+    auth = handler.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth[7:]
+    return ""
+
+
+def generate_otp() -> str:
+    """Generate a 6-digit OTP code."""
+    return "".join(random.choices(string.digits, k=6))
+
+
+def send_otp_email(email: str, otp_code: str) -> bool:
+    """Send OTP verification email using platform SMTP settings."""
+    db = get_db()
+    try:
+        settings = {
+            r["key"]: r["value"]
+            for r in db.execute("SELECT * FROM platform_settings").fetchall()
+        }
+    finally:
+        db.close()
+
+    smtp_user = settings.get("platform_smtp_email", "")
+    smtp_pass_raw = settings.get("platform_smtp_password", "")
+    smtp_pass = decrypt(smtp_pass_raw) if smtp_pass_raw else ""
+    smtp_server = settings.get("platform_smtp_server", "smtp.gmail.com")
+    smtp_port = int(settings.get("platform_smtp_port", "587"))
+
+    if not smtp_user or not smtp_pass:
+        return False
+
+    msg = EmailMessage()
+    msg["Subject"] = "Your Verification Code — Training Attendance Manager"
+    msg["From"] = smtp_user
+    msg["To"] = email
+    msg.set_content(
+        f"Your verification code is: {otp_code}\n\n"
+        f"This code expires in {OTP_EXPIRY_MINUTES} minutes.\n"
+        f"If you did not request this, please ignore this email.\n"
+    )
+
+    try:
+        with smtplib.SMTP(smtp_server, smtp_port, timeout=15) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(smtp_user, smtp_pass)
+            server.send_message(msg)
+        return True
+    except Exception:
+        return False
+
+
+def get_user_credentials(account_id: str):
+    """Get decrypted credentials for a user account."""
+    db = get_db()
+    try:
+        row = db.execute(
+            "SELECT * FROM user_credentials WHERE account_id = ?", (account_id,)
+        ).fetchone()
+        if not row:
+            return None
+        creds = dict(row)
+        # Decrypt sensitive fields
+        if creds.get("smtp_password"):
+            creds["smtp_password"] = decrypt(creds["smtp_password"])
+        if creds.get("telegram_bot_token"):
+            creds["telegram_bot_token"] = decrypt(creds["telegram_bot_token"])
+        return creds
+    finally:
+        db.close()
+
+
+def log_admin_action(admin_id: str, action: str, target_id: str = None, details: str = None):
+    """Log an admin action to the audit log."""
+    db = get_db()
+    try:
+        db.execute(
+            "INSERT INTO admin_audit_log (id, admin_id, action, target_id, details, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
+            (gen_id("aud"), admin_id, action, target_id, details, datetime.now(timezone.utc).isoformat()),
+        )
+        db.commit()
+    finally:
+        db.close()
+
+
 # ── Route Handlers ─────────────────────────────────────────────
 
 def handle_health(handler):
@@ -200,28 +395,46 @@ def handle_health(handler):
 
 
 def handle_list_users(handler):
+    user = getattr(handler, "_current_user", None)
     db = get_db()
     try:
-        rows = db.execute(
-            "SELECT id, pin, name, dept, active FROM users ORDER BY id"
-        ).fetchall()
+        if user:
+            rows = db.execute(
+                "SELECT id, pin, name, dept, active FROM users WHERE owner_id = ? OR owner_id IS NULL ORDER BY id",
+                (user["id"],),
+            ).fetchall()
+        else:
+            rows = db.execute(
+                "SELECT id, pin, name, dept, active FROM users ORDER BY id"
+            ).fetchall()
         return json_response(handler, [dict(r) for r in rows])
     finally:
         db.close()
 
 
 def handle_list_events(handler):
+    user = getattr(handler, "_current_user", None)
     db = get_db()
     try:
-        rows = db.execute("""
-            SELECT e.*, COUNT(a.id) AS attendee_count
-            FROM events e
-            LEFT JOIN attendance a ON a.event_id = e.id
-            GROUP BY e.id
-            ORDER BY e.created_at DESC
-        """).fetchall()
+        if user:
+            # Tenant isolation: only show events owned by this user
+            rows = db.execute("""
+                SELECT e.*, COUNT(a.id) AS attendee_count
+                FROM events e
+                LEFT JOIN attendance a ON a.event_id = e.id
+                WHERE e.owner_id = ?
+                GROUP BY e.id
+                ORDER BY e.created_at DESC
+            """, (user["id"],)).fetchall()
+        else:
+            rows = db.execute("""
+                SELECT e.*, COUNT(a.id) AS attendee_count
+                FROM events e
+                LEFT JOIN attendance a ON a.event_id = e.id
+                GROUP BY e.id
+                ORDER BY e.created_at DESC
+            """).fetchall()
         events = [dict(r) for r in rows]
-        # Add explicit checkins_count for frontend dashboard compatibility
         for ev in events:
             ev["checkins_count"] = ev["attendee_count"]
         return json_response(handler, events)
@@ -230,6 +443,7 @@ def handle_list_events(handler):
 
 
 def handle_create_event(handler):
+    user = getattr(handler, "_current_user", None)
     body = read_json_body(handler)
     name = (body.get("name") or "").strip()
     date = (body.get("date") or "").strip()
@@ -243,13 +457,14 @@ def handle_create_event(handler):
         "time": (body.get("time") or "").strip(),
         "location": (body.get("location") or "").strip(),
         "description": (body.get("description") or "").strip(),
+        "owner_id": user["id"] if user else None,
     }
 
     db = get_db()
     try:
         db.execute(
-            """INSERT INTO events (id, name, date, time, location, description)
-               VALUES (:id, :name, :date, :time, :location, :description)""",
+            """INSERT INTO events (id, name, date, time, location, description, owner_id)
+               VALUES (:id, :name, :date, :time, :location, :description, :owner_id)""",
             event,
         )
         db.commit()
@@ -430,11 +645,15 @@ def handle_delete_registered(handler, event_id, emp_code):
 
 
 def handle_delete_event(handler, event_id):
+    user = getattr(handler, "_current_user", None)
     db = get_db()
     try:
-        event = db.execute("SELECT id FROM events WHERE id = ?", (event_id,)).fetchone()
+        event = db.execute("SELECT id, owner_id FROM events WHERE id = ?", (event_id,)).fetchone()
         if not event:
             return json_response(handler, {"error": "event not found"}, 404)
+        # Tenant isolation: only owner can delete
+        if user and event["owner_id"] and event["owner_id"] != user["id"]:
+            return json_response(handler, {"error": "access denied"}, 403)
         db.execute("DELETE FROM registered_attendees WHERE event_id = ?", (event_id,))
         db.execute("DELETE FROM attendance WHERE event_id = ?", (event_id,))
         db.execute("DELETE FROM events WHERE id = ?", (event_id,))
@@ -643,9 +862,10 @@ def handle_email_report(handler, event_id):
     """POST /api/events/<id>/report/email — generate CSV and email it.
 
     Body:  {"email": "recipient@example.com"}
-    Reads SMTP_EMAIL and SMTP_PASSWORD from env / .env file.
-    Uses Gmail SMTP (smtp.gmail.com:587) with STARTTLS.
+    Uses per-tenant SMTP credentials from user_credentials table.
+    Falls back to platform SMTP settings if tenant has no credentials.
     """
+    user = getattr(handler, "_current_user", None)
     body = read_json_body(handler)
     to_email = (body.get("email") or "").strip()
     if not to_email:
@@ -653,7 +873,7 @@ def handle_email_report(handler, event_id):
 
     db = get_db()
     try:
-        event = db.execute("SELECT id, name, date FROM events WHERE id = ?", (event_id,)).fetchone()
+        event = db.execute("SELECT id, name, date, owner_id FROM events WHERE id = ?", (event_id,)).fetchone()
         if not event:
             return json_response(handler, {"error": "event not found"}, 404)
 
@@ -697,14 +917,37 @@ def handle_email_report(handler, event_id):
         csv_content = output.getvalue()
         output.close()
 
-        # ── Send via Gmail SMTP ──────────────────────────────
-        smtp_user = os.environ.get("SMTP_EMAIL", "")
-        smtp_pass = os.environ.get("SMTP_PASSWORD", "")
+        # ── Resolve SMTP credentials (per-tenant → platform fallback) ──
+        smtp_user = ""
+        smtp_pass = ""
+        smtp_server = "smtp.gmail.com"
+        smtp_port = 587
+
+        # Try per-tenant credentials first
+        if event["owner_id"]:
+            creds = get_user_credentials(event["owner_id"])
+            if creds and creds.get("smtp_email") and creds.get("smtp_password"):
+                smtp_user = creds["smtp_email"]
+                smtp_pass = creds["smtp_password"]
+                smtp_server = creds.get("smtp_server", "smtp.gmail.com")
+                smtp_port = creds.get("smtp_port", 587)
+
+        # Fallback to platform SMTP
+        if not smtp_user or not smtp_pass:
+            settings = {
+                r["key"]: r["value"]
+                for r in db.execute("SELECT * FROM platform_settings").fetchall()
+            }
+            smtp_user = settings.get("platform_smtp_email", "")
+            smtp_pass_raw = settings.get("platform_smtp_password", "")
+            smtp_pass = decrypt(smtp_pass_raw) if smtp_pass_raw else ""
+            smtp_server = settings.get("platform_smtp_server", "smtp.gmail.com")
+            smtp_port = int(settings.get("platform_smtp_port", "587"))
 
         if not smtp_user or not smtp_pass:
             return json_response(handler, {
                 "error": "SMTP not configured",
-                "message": "Set SMTP_EMAIL and SMTP_PASSWORD in .env file.",
+                "message": "No SMTP credentials found. Please set up your email in Settings.",
             }, 500)
 
         msg = EmailMessage()
@@ -725,7 +968,7 @@ def handle_email_report(handler, event_id):
         )
 
         try:
-            with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
+            with smtplib.SMTP(smtp_server, smtp_port, timeout=15) as server:
                 server.ehlo()
                 server.starttls()
                 server.ehlo()
@@ -734,7 +977,7 @@ def handle_email_report(handler, event_id):
         except smtplib.SMTPAuthenticationError:
             return json_response(handler, {
                 "error": "SMTP authentication failed",
-                "message": "Check SMTP_EMAIL and SMTP_PASSWORD. For Gmail, use an App Password.",
+                "message": "Check your SMTP credentials. For Gmail, use an App Password.",
             }, 500)
         except smtplib.SMTPException as e:
             return json_response(handler, {
@@ -1302,6 +1545,500 @@ def handle_analytics(handler):
         db.close()
 
 
+# ── Auth Endpoints ────────────────────────────────────────────
+
+def handle_register(handler):
+    """POST /api/auth/register — register a new account with email + password."""
+    body = read_json_body(handler)
+    email = (body.get("email") or "").strip().lower()
+    password = (body.get("password") or "").strip()
+    name = (body.get("name") or "").strip()
+
+    if not email or not password or not name:
+        return json_response(handler, {"error": "email, password, and name are required"}, 400)
+    if len(password) < 6:
+        return json_response(handler, {"error": "password must be at least 6 characters"}, 400)
+    if "@" not in email:
+        return json_response(handler, {"error": "invalid email address"}, 400)
+
+    # Check if registration is open
+    db = get_db()
+    try:
+        reg_open = db.execute(
+            "SELECT value FROM platform_settings WHERE key = 'registration_open'"
+        ).fetchone()
+        if reg_open and reg_open["value"] != "true":
+            return json_response(handler, {"error": "Registration is currently closed. Contact the administrator."}, 403)
+
+        # Check if email already exists
+        existing = db.execute("SELECT id FROM accounts WHERE email = ?", (email,)).fetchone()
+        if existing:
+            return json_response(handler, {"error": "An account with this email already exists"}, 409)
+
+        # Check if this is the first user — make them platform_admin
+        user_count = db.execute("SELECT COUNT(*) AS n FROM accounts").fetchone()["n"]
+        role = "platform_admin" if user_count == 0 else "user"
+
+        # Generate OTP
+        otp = generate_otp()
+        otp_expires = (datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRY_MINUTES)).isoformat()
+
+        account_id = gen_id("acc")
+        db.execute(
+            """INSERT INTO accounts (id, email, password_hash, name, role, status, otp_code, otp_expires, created_at)
+               VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)""",
+            (account_id, email, hash_password(password), name, role, otp, otp_expires, datetime.now(timezone.utc).isoformat()),
+        )
+        db.commit()
+
+        # Send OTP email
+        if not send_otp_email(email, otp):
+            # Still return success but warn — account is created, OTP might need resend
+            return json_response(handler, {
+                "status": "pending",
+                "message": "Account created. OTP email could not be sent — use resend.",
+                "account_id": account_id,
+            }, 201)
+
+        return json_response(handler, {
+            "status": "pending",
+            "message": "Account created. Please check your email for the verification code.",
+            "account_id": account_id,
+        }, 201)
+    finally:
+        db.close()
+
+
+def handle_verify_otp(handler):
+    """POST /api/auth/verify-otp — verify OTP code and activate account."""
+    body = read_json_body(handler)
+    email = (body.get("email") or "").strip().lower()
+    otp = (body.get("otp") or "").strip()
+
+    if not email or not otp:
+        return json_response(handler, {"error": "email and otp are required"}, 400)
+
+    db = get_db()
+    try:
+        account = db.execute("SELECT * FROM accounts WHERE email = ?", (email,)).fetchone()
+        if not account:
+            return json_response(handler, {"error": "Account not found"}, 404)
+
+        account = dict(account)
+
+        if account["status"] == "active":
+            return json_response(handler, {"error": "Account is already verified"}, 400)
+
+        if not account["otp_code"] or not account["otp_expires"]:
+            return json_response(handler, {"error": "No OTP pending. Please register again or resend OTP."}, 400)
+
+        # Check OTP expiry
+        otp_expiry = datetime.fromisoformat(account["otp_expires"])
+        if datetime.now(timezone.utc) > otp_expiry:
+            return json_response(handler, {"error": "OTP has expired. Please request a new one."}, 400)
+
+        # Check OTP attempts (stored in otp_code field, appended with attempt count)
+        otp_parts = account["otp_code"].split(":")
+        actual_otp = otp_parts[0]
+        attempts = int(otp_parts[1]) if len(otp_parts) > 1 else 0
+
+        if attempts >= OTP_MAX_ATTEMPTS:
+            return json_response(handler, {"error": "Too many failed attempts. Please request a new OTP."}, 429)
+
+        if otp != actual_otp:
+            # Increment attempt count
+            new_code = f"{actual_otp}:{attempts + 1}"
+            db.execute("UPDATE accounts SET otp_code = ? WHERE id = ?", (new_code, account["id"]))
+            db.commit()
+            remaining = OTP_MAX_ATTEMPTS - attempts - 1
+            return json_response(handler, {"error": f"Invalid OTP. {remaining} attempts remaining."}, 400)
+
+        # OTP verified — activate account
+        db.execute(
+            "UPDATE accounts SET status = 'active', otp_code = NULL, otp_expires = NULL WHERE id = ?",
+            (account["id"],),
+        )
+
+        # Create credential placeholder
+        db.execute(
+            "INSERT OR IGNORE INTO user_credentials (account_id) VALUES (?)",
+            (account["id"],),
+        )
+        db.commit()
+
+        # Generate JWT token
+        token = create_token(account["id"], account["role"])
+
+        return json_response(handler, {
+            "status": "active",
+            "token": token,
+            "user": {
+                "id": account["id"],
+                "email": account["email"],
+                "name": account["name"],
+                "role": account["role"],
+                "setup_complete": account["setup_complete"],
+            },
+        })
+    finally:
+        db.close()
+
+
+def handle_login(handler):
+    """POST /api/auth/login — login with email + password."""
+    body = read_json_body(handler)
+    email = (body.get("email") or "").strip().lower()
+    password = (body.get("password") or "").strip()
+
+    if not email or not password:
+        return json_response(handler, {"error": "email and password are required"}, 400)
+
+    db = get_db()
+    try:
+        account = db.execute("SELECT * FROM accounts WHERE email = ?", (email,)).fetchone()
+        if not account:
+            return json_response(handler, {"error": "Invalid email or password"}, 401)
+
+        account = dict(account)
+
+        if not check_password(password, account["password_hash"]):
+            return json_response(handler, {"error": "Invalid email or password"}, 401)
+
+        if account["status"] == "pending":
+            return json_response(handler, {"error": "Account not verified. Please check your email for OTP."}, 403)
+
+        if account["status"] == "suspended":
+            return json_response(handler, {"error": "Account has been suspended. Contact the administrator."}, 403)
+
+        # Update last login
+        db.execute(
+            "UPDATE accounts SET last_login = ? WHERE id = ?",
+            (datetime.now(timezone.utc).isoformat(), account["id"]),
+        )
+        db.commit()
+
+        token = create_token(account["id"], account["role"])
+
+        return json_response(handler, {
+            "status": "ok",
+            "token": token,
+            "user": {
+                "id": account["id"],
+                "email": account["email"],
+                "name": account["name"],
+                "role": account["role"],
+                "setup_complete": account["setup_complete"],
+            },
+        })
+    finally:
+        db.close()
+
+
+def handle_resend_otp(handler):
+    """POST /api/auth/resend-otp — resend OTP to email."""
+    body = read_json_body(handler)
+    email = (body.get("email") or "").strip().lower()
+
+    if not email:
+        return json_response(handler, {"error": "email is required"}, 400)
+
+    db = get_db()
+    try:
+        account = db.execute("SELECT * FROM accounts WHERE email = ?", (email,)).fetchone()
+        if not account:
+            return json_response(handler, {"error": "Account not found"}, 404)
+
+        account = dict(account)
+        if account["status"] == "active":
+            return json_response(handler, {"error": "Account is already verified"}, 400)
+
+        # Rate limit: max 3 resends per 10 minutes (check last OTP creation time)
+        otp = generate_otp()
+        otp_expires = (datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRY_MINUTES)).isoformat()
+
+        db.execute(
+            "UPDATE accounts SET otp_code = ?, otp_expires = ? WHERE id = ?",
+            (otp, otp_expires, account["id"]),
+        )
+        db.commit()
+
+        if not send_otp_email(email, otp):
+            return json_response(handler, {"error": "Failed to send OTP email. Try again later."}, 500)
+
+        return json_response(handler, {"status": "ok", "message": "OTP sent to your email"})
+    finally:
+        db.close()
+
+
+def handle_auth_me(handler):
+    """GET /api/auth/me — get current user info (requires auth)."""
+    user = getattr(handler, "_current_user", None)
+    if not user:
+        return json_response(handler, {"error": "Not authenticated"}, 401)
+
+    db = get_db()
+    try:
+        creds = db.execute(
+            "SELECT telegram_bot_name, smtp_email, smtp_server, verified_at FROM user_credentials WHERE account_id = ?",
+            (user["id"],),
+        ).fetchone()
+        result = {
+            "id": user["id"],
+            "email": user["email"],
+            "name": user["name"],
+            "role": user["role"],
+            "setup_complete": user["setup_complete"],
+            "has_credentials": bool(creds and (creds["telegram_bot_name"] or creds["smtp_email"])),
+        }
+        return json_response(handler, result)
+    finally:
+        db.close()
+
+
+def handle_setup_credentials(handler):
+    """POST /api/auth/setup-credentials — save Telegram + SMTP credentials."""
+    user = getattr(handler, "_current_user", None)
+    if not user:
+        return json_response(handler, {"error": "Not authenticated"}, 401)
+
+    body = read_json_body(handler)
+    telegram_token = (body.get("telegram_bot_token") or "").strip()
+    telegram_name = (body.get("telegram_bot_name") or "").strip()
+    smtp_email = (body.get("smtp_email") or "").strip()
+    smtp_password = (body.get("smtp_password") or "").strip()
+    smtp_server = (body.get("smtp_server") or "smtp.gmail.com").strip()
+    smtp_port = int(body.get("smtp_port", 587))
+
+    db = get_db()
+    try:
+        db.execute(
+            """INSERT INTO user_credentials (account_id, telegram_bot_token, telegram_bot_name,
+                   smtp_email, smtp_password, smtp_server, smtp_port, verified_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(account_id) DO UPDATE SET
+                   telegram_bot_token = excluded.telegram_bot_token,
+                   telegram_bot_name = excluded.telegram_bot_name,
+                   smtp_email = excluded.smtp_email,
+                   smtp_password = excluded.smtp_password,
+                   smtp_server = excluded.smtp_server,
+                   smtp_port = excluded.smtp_port,
+                   verified_at = excluded.verified_at""",
+            (
+                user["id"],
+                encrypt(telegram_token) if telegram_token else "",
+                telegram_name,
+                smtp_email,
+                encrypt(smtp_password) if smtp_password else "",
+                smtp_server,
+                smtp_port,
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+        db.execute("UPDATE accounts SET setup_complete = 1 WHERE id = ?", (user["id"],))
+        db.commit()
+        return json_response(handler, {"status": "ok", "message": "Credentials saved successfully"})
+    finally:
+        db.close()
+
+
+def handle_test_telegram(handler):
+    """POST /api/auth/test-telegram — validate a Telegram bot token."""
+    user = getattr(handler, "_current_user", None)
+    if not user:
+        return json_response(handler, {"error": "Not authenticated"}, 401)
+
+    body = read_json_body(handler)
+    token = (body.get("token") or "").strip()
+    if not token:
+        return json_response(handler, {"error": "token is required"}, 400)
+
+    # Test by calling Telegram getMe API
+    import urllib.request
+    import urllib.error
+    try:
+        req = urllib.request.Request(f"https://api.telegram.org/bot{token}/getMe")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+            if data.get("ok"):
+                bot_info = data.get("result", {})
+                return json_response(handler, {
+                    "status": "ok",
+                    "bot_name": bot_info.get("first_name", ""),
+                    "bot_username": bot_info.get("username", ""),
+                })
+            else:
+                return json_response(handler, {"error": "Invalid bot token"}, 400)
+    except urllib.error.URLError:
+        return json_response(handler, {"error": "Could not connect to Telegram API"}, 502)
+    except Exception as e:
+        return json_response(handler, {"error": f"Validation failed: {str(e)}"}, 500)
+
+
+def handle_test_smtp(handler):
+    """POST /api/auth/test-smtp — validate SMTP credentials."""
+    user = getattr(handler, "_current_user", None)
+    if not user:
+        return json_response(handler, {"error": "Not authenticated"}, 401)
+
+    body = read_json_body(handler)
+    smtp_email = (body.get("smtp_email") or "").strip()
+    smtp_password = (body.get("smtp_password") or "").strip()
+    smtp_server = (body.get("smtp_server") or "smtp.gmail.com").strip()
+    smtp_port = int(body.get("smtp_port", 587))
+
+    if not smtp_email or not smtp_password:
+        return json_response(handler, {"error": "smtp_email and smtp_password are required"}, 400)
+
+    try:
+        with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(smtp_email, smtp_password)
+        return json_response(handler, {"status": "ok", "message": "SMTP connection verified"})
+    except smtplib.SMTPAuthenticationError:
+        return json_response(handler, {"error": "SMTP authentication failed. Check your email and app password."}, 400)
+    except Exception as e:
+        return json_response(handler, {"error": f"SMTP connection failed: {str(e)}"}, 500)
+
+
+# ── Platform Admin Endpoints ──────────────────────────────────
+
+def handle_platform_settings(handler):
+    """GET/POST /api/platform/settings — platform settings (admin only)."""
+    user = getattr(handler, "_current_user", None)
+    if not user or user["role"] != "platform_admin":
+        return json_response(handler, {"error": "Admin access required"}, 403)
+
+    db = get_db()
+    try:
+        if handler.command == "GET":
+            rows = db.execute("SELECT * FROM platform_settings").fetchall()
+            settings = {}
+            for r in rows:
+                val = r["value"]
+                # Don't expose encrypted SMTP password in full
+                if r["key"] == "platform_smtp_password":
+                    val = "***hidden***" if val else ""
+                settings[r["key"]] = val
+            return json_response(handler, settings)
+
+        # POST — update settings
+        body = read_json_body(handler)
+        for key, value in body.items():
+            if key == "platform_smtp_password" and value and value != "***hidden***":
+                value = encrypt(value)
+            db.execute(
+                "INSERT INTO platform_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, str(value)),
+            )
+        db.commit()
+        log_admin_action(user["id"], "update_platform_settings", details=json.dumps(list(body.keys())))
+        return json_response(handler, {"status": "ok", "message": "Settings updated"})
+    finally:
+        db.close()
+
+
+def handle_platform_users(handler):
+    """GET /api/platform/users — list all users (admin only)."""
+    user = getattr(handler, "_current_user", None)
+    if not user or user["role"] != "platform_admin":
+        return json_response(handler, {"error": "Admin access required"}, 403)
+
+    db = get_db()
+    try:
+        rows = db.execute(
+            """SELECT id, email, name, role, status, setup_complete, created_at, last_login
+               FROM accounts ORDER BY created_at DESC"""
+        ).fetchall()
+        users = [dict(r) for r in rows]
+
+        # Add credential status
+        for u in users:
+            creds = db.execute(
+                "SELECT telegram_bot_name, smtp_email FROM user_credentials WHERE account_id = ?",
+                (u["id"],),
+            ).fetchone()
+            u["has_telegram"] = bool(creds and creds["telegram_bot_name"])
+            u["has_smtp"] = bool(creds and creds["smtp_email"])
+
+        return json_response(handler, users)
+    finally:
+        db.close()
+
+
+def handle_platform_user_action(handler, user_id, action):
+    """POST /api/platform/users/<id>/<action> — suspend or activate user."""
+    admin = getattr(handler, "_current_user", None)
+    if not admin or admin["role"] != "platform_admin":
+        return json_response(handler, {"error": "Admin access required"}, 403)
+
+    if action not in ("suspend", "activate"):
+        return json_response(handler, {"error": "Invalid action"}, 400)
+
+    if user_id == admin["id"]:
+        return json_response(handler, {"error": "Cannot modify your own account"}, 400)
+
+    db = get_db()
+    try:
+        account = db.execute("SELECT id, name, status FROM accounts WHERE id = ?", (user_id,)).fetchone()
+        if not account:
+            return json_response(handler, {"error": "User not found"}, 404)
+
+        new_status = "suspended" if action == "suspend" else "active"
+        db.execute("UPDATE accounts SET status = ? WHERE id = ?", (new_status, user_id))
+        db.commit()
+        log_admin_action(admin["id"], f"user_{action}", target_id=user_id, details=account["name"])
+        msg = "suspended" if action == "suspend" else "activated"
+        return json_response(handler, {"status": "ok", "message": f"User {msg}"})
+    finally:
+        db.close()
+
+
+def handle_platform_audit_log(handler):
+    """GET /api/platform/audit-log — admin audit log."""
+    user = getattr(handler, "_current_user", None)
+    if not user or user["role"] != "platform_admin":
+        return json_response(handler, {"error": "Admin access required"}, 403)
+
+    db = get_db()
+    try:
+        rows = db.execute(
+            """SELECT a.*, ac.name AS admin_name
+               FROM admin_audit_log a
+               LEFT JOIN accounts ac ON ac.id = a.admin_id
+               ORDER BY a.timestamp DESC LIMIT 100"""
+        ).fetchall()
+        return json_response(handler, [dict(r) for r in rows])
+    finally:
+        db.close()
+
+
+def handle_platform_registration_toggle(handler):
+    """POST /api/platform/registration — toggle registration open/closed."""
+    user = getattr(handler, "_current_user", None)
+    if not user or user["role"] != "platform_admin":
+        return json_response(handler, {"error": "Admin access required"}, 403)
+
+    body = read_json_body(handler)
+    open_val = body.get("open")
+    if open_val is None:
+        return json_response(handler, {"error": "open (true/false) is required"}, 400)
+
+    db = get_db()
+    try:
+        val = "true" if open_val else "false"
+        db.execute(
+            "INSERT INTO platform_settings (key, value) VALUES ('registration_open', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (val,),
+        )
+        db.commit()
+        log_admin_action(user["id"], "toggle_registration", details=f"registration_open={val}")
+        return json_response(handler, {"status": "ok", "registration_open": val})
+    finally:
+        db.close()
+
+
 def serve_static(handler, path):
     """Serve static files (index.html, self-checkin.html)."""
     if path in ("/", "/index.html"):
@@ -1328,24 +2065,80 @@ def serve_static(handler, path):
 
 
 # ── URL Router ─────────────────────────────────────────────────
-ROUTES = [
-    # (method, pattern, handler)
-    # Pattern groups: /api/events/<id> captures the ID
-]
 
-API_PATTERNS = [
-    (r"^/api/health$"),
-    (r"^/api/users$"),
-    (r"^/api/events$"),
-    (r"^/api/events/([a-zA-Z0-9_]+)$"),
-    (r"^/api/checkin$"),
-    (r"^/api/analytics$"),
+# Routes that don't require authentication
+PUBLIC_ROUTES = [
+    ("GET",  r"^/api/health$"),
+    ("POST", r"^/api/auth/register$"),
+    ("POST", r"^/api/auth/verify-otp$"),
+    ("POST", r"^/api/auth/login$"),
+    ("POST", r"^/api/auth/resend-otp$"),
+    ("GET",  r"^/self-checkin"),
+    ("POST", r"^/api/checkin/self$"),
+    ("GET",  r"^/api/checkin/remote$"),
+    ("POST", r"^/api/checkin$"),
+    ("GET",  r"^/$"),
+    ("GET",  r"^/index\.html$"),
+    ("GET",  r"^/self-checkin\.html$"),
 ]
 
 
 def route_request(handler, method, path, query):
-    """Simple regex-based router for API endpoints."""
+    """Simple regex-based router with auth middleware."""
 
+    # ── Auth Middleware ──────────────────────────────────────
+    is_public = False
+    for pub_method, pub_pattern in PUBLIC_ROUTES:
+        if method == pub_method and re.match(pub_pattern, path):
+            is_public = True
+            break
+
+    if not is_public:
+        token = extract_token(handler)
+        if not token:
+            return json_response(handler, {"error": "Authentication required"}, 401)
+        user = verify_jwt(token)
+        if not user:
+            return json_response(handler, {"error": "Invalid or expired token"}, 401)
+        if user["status"] != "active":
+            return json_response(handler, {"error": "Account not active"}, 403)
+        handler._current_user = user
+
+    # ── Auth Routes ─────────────────────────────────────────
+    if method == "POST" and re.match(r"^/api/auth/register$", path):
+        return handle_register(handler)
+    if method == "POST" and re.match(r"^/api/auth/verify-otp$", path):
+        return handle_verify_otp(handler)
+    if method == "POST" and re.match(r"^/api/auth/login$", path):
+        return handle_login(handler)
+    if method == "POST" and re.match(r"^/api/auth/resend-otp$", path):
+        return handle_resend_otp(handler)
+    if method == "GET" and re.match(r"^/api/auth/me$", path):
+        return handle_auth_me(handler)
+    if method == "POST" and re.match(r"^/api/auth/setup-credentials$", path):
+        return handle_setup_credentials(handler)
+    if method == "POST" and re.match(r"^/api/auth/test-telegram$", path):
+        return handle_test_telegram(handler)
+    if method == "POST" and re.match(r"^/api/auth/test-smtp$", path):
+        return handle_test_smtp(handler)
+
+    # ── Platform Admin Routes ───────────────────────────────
+    if method == "GET" and re.match(r"^/api/platform/settings$", path):
+        return handle_platform_settings(handler)
+    if method == "POST" and re.match(r"^/api/platform/settings$", path):
+        return handle_platform_settings(handler)
+    if method == "GET" and re.match(r"^/api/platform/users$", path):
+        return handle_platform_users(handler)
+    if method == "GET" and re.match(r"^/api/platform/audit-log$", path):
+        return handle_platform_audit_log(handler)
+    if method == "POST" and re.match(r"^/api/platform/registration$", path):
+        return handle_platform_registration_toggle(handler)
+
+    m = re.match(r"^/api/platform/users/([a-zA-Z0-9_-]+)/(suspend|activate)$", path)
+    if m:
+        return handle_platform_user_action(handler, m.group(1), m.group(2))
+
+    # ── Core Routes ─────────────────────────────────────────
     # /api/health
     if method == "GET" and re.match(r"^/api/health$", path):
         return handle_health(handler)
@@ -1463,7 +2256,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
 
     def do_GET(self):
