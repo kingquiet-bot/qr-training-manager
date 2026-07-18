@@ -1723,6 +1723,12 @@ def handle_login(handler):
 
         account = dict(account)
 
+        # Google OAuth accounts have no password — block email/password login
+        if not account["password_hash"]:
+            return json_response(handler, {
+                "error": "This account uses Google Sign-in. Please use the Google button to log in.",
+            }, 401)
+
         if not check_password(password, account["password_hash"]):
             return json_response(handler, {"error": "Invalid email or password"}, 401)
 
