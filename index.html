@@ -648,7 +648,7 @@
     // ── PWA: Register Service Worker ──────────────────────────
     if ('serviceWorker' in navigator) {
       const swCode = `
-        const CACHE = 'attendance-v1';
+        const CACHE = 'attendance-v2';
         const ASSETS = [
           '/',
           '/index.html',
@@ -656,7 +656,11 @@
           'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js'
         ];
         self.addEventListener('install', e => {
-          e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).catch(() => {}));
+          e.waitUntil(
+            caches.keys().then(keys => Promise.all(
+              keys.filter(k => k !== CACHE).map(k => caches.delete(k))
+            )).then(() => caches.open(CACHE).then(c => c.addAll(ASSETS))).catch(() => {})
+          );
         });
         self.addEventListener('fetch', e => {
           // Only handle http/https requests (skip blob:, chrome-extension:, etc.)
