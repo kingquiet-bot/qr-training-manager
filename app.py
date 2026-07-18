@@ -202,13 +202,16 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_accounts_email ON accounts(email);
     """)
 
-    # Seed default platform settings
+    # Sync platform settings from environment variables (env vars always win)
+    smtp_email = os.environ.get("SMTP_EMAIL", "")
+    smtp_pass = os.environ.get("SMTP_PASSWORD", "")
     db.executemany(
-        "INSERT OR IGNORE INTO platform_settings (key, value) VALUES (?, ?)",
+        """INSERT INTO platform_settings (key, value) VALUES (?, ?)
+           ON CONFLICT(key) DO UPDATE SET value = excluded.value""",
         [
             ("registration_open", "true"),
-            ("platform_smtp_email", os.environ.get("SMTP_EMAIL", "")),
-            ("platform_smtp_password", encrypt(os.environ.get("SMTP_PASSWORD", "")) if os.environ.get("SMTP_PASSWORD") else ""),
+            ("platform_smtp_email", smtp_email),
+            ("platform_smtp_password", encrypt(smtp_pass) if smtp_pass else ""),
             ("platform_smtp_server", "smtp.gmail.com"),
             ("platform_smtp_port", "587"),
         ],
