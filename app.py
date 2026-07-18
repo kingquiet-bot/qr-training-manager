@@ -75,6 +75,8 @@ def migrate_db(db):
         db.execute("ALTER TABLE accounts ADD COLUMN auth_provider TEXT DEFAULT 'local'")
     except sqlite3.OperationalError:
         pass
+    # Migrate platform_admin → super_admin
+    db.execute("UPDATE accounts SET role = 'super_admin' WHERE role = 'platform_admin'")
     db.commit()
 
 
@@ -1591,9 +1593,9 @@ def handle_register(handler):
         if existing:
             return json_response(handler, {"error": "An account with this email already exists"}, 409)
 
-        # Check if this is the first user — make them platform_admin
+        # Check if this is the first user — make them super_admin
         user_count = db.execute("SELECT COUNT(*) AS n FROM accounts").fetchone()["n"]
-        role = "platform_admin" if user_count == 0 else "user"
+        role = "super_admin" if user_count == 0 else "user"
 
         # Generate OTP
         otp = generate_otp()
@@ -2016,7 +2018,7 @@ def handle_google_auth(handler):
         else:
             # New account — create with Google auth
             user_count = db.execute("SELECT COUNT(*) AS n FROM accounts").fetchone()["n"]
-            role = "platform_admin" if user_count == 0 else "user"
+            role = "super_admin" if user_count == 0 else "user"
 
             account_id = gen_id("acc")
             db.execute(
@@ -2055,9 +2057,9 @@ def handle_google_auth(handler):
 # ── Platform Admin Endpoints ──────────────────────────────────
 
 def handle_platform_settings(handler):
-    """GET/POST /api/platform/settings — platform settings (admin only)."""
+    """GET/POST /api/platform/settings — platform settings (super_admin or admin)."""
     user = getattr(handler, "_current_user", None)
-    if not user or user["role"] != "platform_admin":
+    if not user or user["role"] not in ("super_admin", "admin"):
         return json_response(handler, {"error": "Admin access required"}, 403)
 
     db = get_db()
@@ -2090,10 +2092,10 @@ def handle_platform_settings(handler):
 
 
 def handle_platform_users(handler):
-    """GET /api/platform/users — list all users (admin only)."""
+    """GET /api/platform/users — list all users (super_admin only)."""
     user = getattr(handler, "_current_user", None)
-    if not user or user["role"] != "platform_admin":
-        return json_response(handler, {"error": "Admin access required"}, 403)
+    if not user or user["role"] != "super_admin":
+        return json_response(handler, {"error": "Super admin access required"}, 403)
 
     db = get_db()
     try:
@@ -2118,12 +2120,12 @@ def handle_platform_users(handler):
 
 
 def handle_platform_user_action(handler, user_id, action):
-    """POST /api/platform/users/<id>/<action> — suspend or activate user."""
+    """POST /api/platform/users/<id>/<action> — suspend, activate, or change role."""
     admin = getattr(handler, "_current_user", None)
-    if not admin or admin["role"] != "platform_admin":
-        return json_response(handler, {"error": "Admin access required"}, 403)
+    if not admin or admin["role"] != "super_admin":
+        return json_response(handler, {"error": "Super admin access required"}, 403)
 
-    if action not in ("suspend", "activate"):
+    if action not in ("suspend", "activate", "role"):
         return json_response(handler, {"error": "Invalid action"}, 400)
 
     if user_id == admin["id"]:
@@ -2131,25 +2133,78 @@ def handle_platform_user_action(handler, user_id, action):
 
     db = get_db()
     try:
-        account = db.execute("SELECT id, name, status FROM accounts WHERE id = ?", (user_id,)).fetchone()
+        account = db.execute("SELECT id, name, role, status FROM accounts WHERE id = ?", (user_id,)).fetchone()
         if not account:
             return json_response(handler, {"error": "User not found"}, 404)
 
-        new_status = "suspended" if action == "suspend" else "active"
-        db.execute("UPDATE accounts SET status = ? WHERE id = ?", (new_status, user_id))
+        # Protect super_admin accounts from being modified
+        if account["role"] == "super_admin":
+            return json_response(handler, {"error": "Cannot modify a super admin account"}, 403)
+
+        if action == "role":
+            body = read_json_body(handler)
+            new_role = (body.get("role") or "").strip()
+            if new_role not in ("admin", "user"):
+                return json_response(handler, {"error": "Role must be 'admin' or 'user'"}, 400)
+            db.execute("UPDATE accounts SET role = ? WHERE id = ?", (new_role, user_id))
+            db.commit()
+            log_admin_action(admin["id"], "change_role", target_id=user_id,
+                             details=f"{account['name']}: {account['role']} → {new_role}")
+            return json_response(handler, {"status": "ok", "message": f"Role changed to {new_role}"})
+        else:
+            new_status = "suspended" if action == "suspend" else "active"
+            db.execute("UPDATE accounts SET status = ? WHERE id = ?", (new_status, user_id))
+            db.commit()
+            log_admin_action(admin["id"], f"user_{action}", target_id=user_id, details=account["name"])
+            msg = "suspended" if action == "suspend" else "activated"
+            return json_response(handler, {"status": "ok", "message": f"User {msg}"})
+    finally:
+        db.close()
+
+
+def handle_change_password(handler):
+    """POST /api/auth/change-password — change own password."""
+    user = getattr(handler, "_current_user", None)
+    if not user:
+        return json_response(handler, {"error": "Not authenticated"}, 401)
+
+    body = read_json_body(handler)
+    old_password = (body.get("old_password") or "").strip()
+    new_password = (body.get("new_password") or "").strip()
+
+    if not old_password or not new_password:
+        return json_response(handler, {"error": "old_password and new_password are required"}, 400)
+    if len(new_password) < 6:
+        return json_response(handler, {"error": "New password must be at least 6 characters"}, 400)
+
+    db = get_db()
+    try:
+        account = db.execute("SELECT * FROM accounts WHERE id = ?", (user["id"],)).fetchone()
+        if not account:
+            return json_response(handler, {"error": "Account not found"}, 404)
+
+        account = dict(account)
+
+        # Google OAuth accounts have no old password — allow setting one
+        if account["password_hash"]:
+            if not check_password(old_password, account["password_hash"]):
+                return json_response(handler, {"error": "Current password is incorrect"}, 401)
+
+        db.execute(
+            "UPDATE accounts SET password_hash = ? WHERE id = ?",
+            (hash_password(new_password), user["id"]),
+        )
         db.commit()
-        log_admin_action(admin["id"], f"user_{action}", target_id=user_id, details=account["name"])
-        msg = "suspended" if action == "suspend" else "activated"
-        return json_response(handler, {"status": "ok", "message": f"User {msg}"})
+        return json_response(handler, {"status": "ok", "message": "Password changed successfully"})
     finally:
         db.close()
 
 
 def handle_platform_audit_log(handler):
-    """GET /api/platform/audit-log — admin audit log."""
+    """GET /api/platform/audit-log — admin audit log (super_admin only)."""
     user = getattr(handler, "_current_user", None)
-    if not user or user["role"] != "platform_admin":
-        return json_response(handler, {"error": "Admin access required"}, 403)
+    if not user or user["role"] != "super_admin":
+        return json_response(handler, {"error": "Super admin access required"}, 403)
 
     db = get_db()
     try:
@@ -2165,10 +2220,10 @@ def handle_platform_audit_log(handler):
 
 
 def handle_platform_registration_toggle(handler):
-    """POST /api/platform/registration — toggle registration open/closed."""
+    """POST /api/platform/registration — toggle registration open/closed (super_admin only)."""
     user = getattr(handler, "_current_user", None)
-    if not user or user["role"] != "platform_admin":
-        return json_response(handler, {"error": "Admin access required"}, 403)
+    if not user or user["role"] != "super_admin":
+        return json_response(handler, {"error": "Super admin access required"}, 403)
 
     body = read_json_body(handler)
     open_val = body.get("open")
@@ -2288,9 +2343,13 @@ def route_request(handler, method, path, query):
     if method == "POST" and re.match(r"^/api/platform/registration$", path):
         return handle_platform_registration_toggle(handler)
 
-    m = re.match(r"^/api/platform/users/([a-zA-Z0-9_-]+)/(suspend|activate)$", path)
+    m = re.match(r"^/api/platform/users/([a-zA-Z0-9_-]+)/(suspend|activate|role)$", path)
     if m:
         return handle_platform_user_action(handler, m.group(1), m.group(2))
+
+    # /api/auth/change-password
+    if method == "POST" and re.match(r"^/api/auth/change-password$", path):
+        return handle_change_password(handler)
 
     # ── Core Routes ─────────────────────────────────────────
     # /api/health
