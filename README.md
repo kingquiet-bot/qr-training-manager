@@ -12,6 +12,7 @@ A lightweight, zero-dependency, full-stack solution for managing training attend
 - **📧 Email Reporting** — Sends attendance CSV reports directly via email
 - **🔗 Self-Check-in** — Employees can check themselves in using a shared link
 - **📊 Real-time Dashboard** — Live tracking of attendance with instant updates
+- **🔐 Google Sign-in** — One-click sign in with your Google account (optional)
 
 ## 📋 Prerequisites
 
@@ -19,6 +20,7 @@ A lightweight, zero-dependency, full-stack solution for managing training attend
 - **pip** — Python package manager (comes with Python)
 - **Telegram Bot Token** — Get one from [@BotFather](https://t.me/BotFather) on Telegram
 - **Gmail App Password** (optional) — For email reporting feature
+- **Google Cloud OAuth Client ID** (optional) — For Google sign-in feature
 
 ## 🚀 Quick Start
 
@@ -45,6 +47,7 @@ cp .env.example .env
 # Required: TELEGRAM_BOT_TOKEN=your_token_here
 # Optional: SMTP_EMAIL=your_email@gmail.com
 # Optional: SMTP_PASSWORD=your_app_password
+# Optional: GOOGLE_CLIENT_ID=your_client_id.apps.googleusercontent.com
 # Optional: TELEGRAM_PROXY=socks5://user:pass@proxy:1080
 ```
 
@@ -99,6 +102,61 @@ python3 qr_bot.py
 ### 5. Access the Application
 
 Open your browser and go to: **http://localhost:5000**
+
+## 🔐 Google Sign-in Setup (Optional)
+
+Add one-click Google sign-in so users can skip email/password registration.
+
+### Step 1: Create Google Cloud Project
+
+1. Go to **https://console.cloud.google.com**
+2. Click the project dropdown → **New Project**
+3. Name it `QR Training Manager` → Click **Create**
+4. Select the new project from the dropdown
+
+### Step 2: Configure OAuth Consent Screen
+
+1. Go to **APIs & Services** → **OAuth consent screen**
+2. Select **External** → Click **Create**
+3. Fill in:
+   - **App name:** `QR Training Manager`
+   - **User support email:** your email
+   - **Developer contact:** your email
+4. Click **Save and Continue**
+5. **Scopes:** Click **Add or Remove Scopes** → select `email` and `profile` → **Update** → **Save and Continue**
+6. **Test users:** Add any Google accounts that need access during testing → **Save**
+
+### Step 3: Create OAuth Client ID
+
+1. Go to **APIs & Services** → **Credentials**
+2. Click **+ Create Credentials** → **OAuth client ID**
+3. **Application type:** `Web application`
+4. **Name:** `QR Training Manager Web Client`
+5. Under **Authorized JavaScript origins**, add:
+   ```
+   http://localhost:5000
+   https://qr-training-manager.onrender.com
+   ```
+6. Click **Create**
+7. **Copy the Client ID**
+
+### Step 4: Add to Environment Variables
+
+```bash
+# In your .env file
+GOOGLE_CLIENT_ID=123456789-abcdef.apps.googleusercontent.com
+```
+
+For **Render**: Go to Environment tab → Add `GOOGLE_CLIENT_ID`
+
+### Step 5: Test
+
+1. Restart the server: `python3 app.py`
+2. Open `http://localhost:5000`
+3. You'll see **"Sign in with Google"** on the login page
+4. Click it → select your Google account → you're in
+
+> **Note:** While unverified, only test users (added in Step 2.6) can sign in. For internal use, no Google verification needed.
 
 ## 📖 Usage Guide
 
@@ -172,8 +230,9 @@ If attendees can't access the self-check-in link:
 
 ```
 qr-training-manager/
-├── app.py              # Flask web server & API
+├── app.py              # Python HTTP server & API (stdlib, no Flask)
 ├── qr_bot.py           # Telegram bot for QR generation
+├── crypto_utils.py     # Encryption for stored credentials
 ├── index.html          # Admin dashboard (PWA)
 ├── self-checkin.html   # Employee self-check-in page
 ├── assets/             # Screenshots and images
