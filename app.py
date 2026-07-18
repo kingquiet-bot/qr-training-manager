@@ -74,11 +74,7 @@ def migrate_db(db):
 
 
 def init_db():
-    """Create tables if they don't exist; wipe fresh for multi-tenant."""
-    # Wipe fresh — delete old database for clean multi-tenant start
-    if os.path.isfile(DATABASE):
-        os.remove(DATABASE)
-
+    """Create tables if they don't exist; safe to call on every start."""
     db = sqlite3.connect(DATABASE)
     db.execute("PRAGMA journal_mode=WAL")
     db.execute("PRAGMA foreign_keys=ON")
@@ -212,6 +208,10 @@ def init_db():
         ],
     )
     db.commit()
+
+    # Run any pending schema migrations (add new columns, etc.)
+    migrate_db(db)
+
     db.close()
 
 
