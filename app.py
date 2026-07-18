@@ -44,6 +44,7 @@ HOST = "0.0.0.0"
 PORT = 5000
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE = os.path.join(BASE_DIR, "attendance.db")
+DEV_MODE = os.environ.get("DEV_MODE", "false").lower() in ("true", "1", "yes")
 
 # Load .env file if present (simple parser, no external deps)
 _ENV_FILE = os.path.join(BASE_DIR, ".env")
@@ -1591,7 +1592,16 @@ def handle_register(handler):
         )
         db.commit()
 
-        # Send OTP email
+        # Send OTP email (or return OTP directly in dev mode)
+        if DEV_MODE:
+            resp = {
+                "status": "pending",
+                "message": "Account created. Enter the code below to verify.",
+                "account_id": account_id,
+                "otp_code": otp,
+            }
+            return json_response(handler, resp, 201)
+
         if not send_otp_email(email, otp):
             # Still return success but warn — account is created, OTP might need resend
             return json_response(handler, {
@@ -1761,6 +1771,9 @@ def handle_resend_otp(handler):
             (otp, otp_expires, account["id"]),
         )
         db.commit()
+
+        if DEV_MODE:
+            return json_response(handler, {"status": "ok", "message": "OTP resent", "otp_code": otp})
 
         if not send_otp_email(email, otp):
             return json_response(handler, {"error": "Failed to send OTP email. Try again later."}, 500)
