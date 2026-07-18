@@ -71,6 +71,11 @@ def migrate_db(db):
         db.execute("ALTER TABLE registered_attendees ADD COLUMN phone TEXT DEFAULT ''")
     except sqlite3.OperationalError:
         pass
+    try:
+        db.execute("ALTER TABLE accounts ADD COLUMN auth_provider TEXT DEFAULT 'local'")
+    except sqlite3.OperationalError:
+        pass
+    db.commit()
 
 
 def init_db():
@@ -85,10 +90,11 @@ def init_db():
         CREATE TABLE IF NOT EXISTS accounts (
             id            TEXT PRIMARY KEY,
             email         TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
+            password_hash TEXT NOT NULL DEFAULT '',
             name          TEXT NOT NULL,
             role          TEXT DEFAULT 'user',
             status        TEXT DEFAULT 'pending',
+            auth_provider TEXT DEFAULT 'local',
             otp_code      TEXT,
             otp_expires   TEXT,
             setup_complete INTEGER DEFAULT 0,
@@ -393,6 +399,12 @@ def handle_health(handler):
         "status": "ok",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })
+
+
+def handle_google_config(handler):
+    """GET /api/config/google-client-id — return Google Client ID for frontend."""
+    client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
+    return json_response(handler, {"client_id": client_id})
 
 
 def handle_list_users(handler):
@@ -1915,6 +1927,122 @@ def handle_test_smtp(handler):
         return json_response(handler, {"error": f"SMTP connection failed: {str(e)}"}, 500)
 
 
+def handle_google_auth(handler):
+    """POST /api/auth/google — sign in/up with Google credential token.
+
+    Accepts {credential} from Google Identity Services.
+    Verifies the token via Google's tokeninfo endpoint, creates or finds
+    the account, and returns a JWT + user object (same shape as login).
+    """
+    body = read_json_body(handler)
+    credential = (body.get("credential") or "").strip()
+    if not credential:
+        return json_response(handler, {"error": "credential is required"}, 400)
+
+    # Verify the Google token via their tokeninfo endpoint
+    import urllib.request
+    import urllib.error
+    try:
+        req = urllib.request.Request(
+            f"https://oauth2.googleapis.com/tokeninfo?id_token={credential}"
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            google_data = json.loads(resp.read().decode())
+    except urllib.error.URLError:
+        return json_response(handler, {"error": "Could not verify Google token"}, 502)
+    except Exception as e:
+        return json_response(handler, {"error": f"Google verification failed: {str(e)}"}, 500)
+
+    # Extract user info from Google token
+    email = google_data.get("email", "").strip().lower()
+    name = google_data.get("name", "").strip()
+    picture = google_data.get("picture", "")
+
+    if not email:
+        return json_response(handler, {"error": "Google token did not contain an email"}, 400)
+
+    db = get_db()
+    try:
+        # Check if registration is open
+        reg_open = db.execute(
+            "SELECT value FROM platform_settings WHERE key = 'registration_open'"
+        ).fetchone()
+        if reg_open and reg_open["value"] != "true":
+            return json_response(handler, {"error": "Registration is currently closed."}, 403)
+
+        # Find or create account
+        account = db.execute("SELECT * FROM accounts WHERE email = ?", (email,)).fetchone()
+
+        if account:
+            # Existing account — check if it's a local account trying to use Google
+            account = dict(account)
+            if account["auth_provider"] == "local" and account["password_hash"]:
+                # Account exists with password — link Google as alternative login
+                db.execute(
+                    "UPDATE accounts SET auth_provider = 'local' WHERE id = ?",
+                    (account["id"],),
+                )
+            # Update last login
+            db.execute(
+                "UPDATE accounts SET last_login = ? WHERE id = ?",
+                (datetime.now(timezone.utc).isoformat(), account["id"]),
+            )
+            db.commit()
+
+            if account["status"] == "suspended":
+                return json_response(handler, {"error": "Account has been suspended."}, 403)
+
+            token = create_token(account["id"], account["role"])
+            return json_response(handler, {
+                "status": "ok",
+                "token": token,
+                "user": {
+                    "id": account["id"],
+                    "email": account["email"],
+                    "name": account["name"],
+                    "role": account["role"],
+                    "setup_complete": account["setup_complete"],
+                },
+            })
+        else:
+            # New account — create with Google auth
+            user_count = db.execute("SELECT COUNT(*) AS n FROM accounts").fetchone()["n"]
+            role = "platform_admin" if user_count == 0 else "user"
+
+            account_id = gen_id("acc")
+            db.execute(
+                """INSERT INTO accounts (id, email, password_hash, name, role, status,
+                       auth_provider, setup_complete, created_at, last_login)
+                   VALUES (?, ?, '', ?, ?, 'active', 'google', 0, ?, ?)""",
+                (
+                    account_id, email, name, role,
+                    datetime.now(timezone.utc).isoformat(),
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+            # Create credential placeholder
+            db.execute(
+                "INSERT OR IGNORE INTO user_credentials (account_id) VALUES (?)",
+                (account_id,),
+            )
+            db.commit()
+
+            token = create_token(account_id, role)
+            return json_response(handler, {
+                "status": "ok",
+                "token": token,
+                "user": {
+                    "id": account_id,
+                    "email": email,
+                    "name": name,
+                    "role": role,
+                    "setup_complete": 0,
+                },
+            })
+    finally:
+        db.close()
+
+
 # ── Platform Admin Endpoints ──────────────────────────────────
 
 def handle_platform_settings(handler):
@@ -2082,10 +2210,12 @@ def serve_static(handler, path):
 # Routes that don't require authentication
 PUBLIC_ROUTES = [
     ("GET",  r"^/api/health$"),
+    ("GET",  r"^/api/config/google-client-id$"),
     ("POST", r"^/api/auth/register$"),
     ("POST", r"^/api/auth/verify-otp$"),
     ("POST", r"^/api/auth/login$"),
     ("POST", r"^/api/auth/resend-otp$"),
+    ("POST", r"^/api/auth/google$"),
     ("GET",  r"^/self-checkin"),
     ("POST", r"^/api/checkin/self$"),
     ("GET",  r"^/api/checkin/remote$"),
@@ -2134,6 +2264,8 @@ def route_request(handler, method, path, query):
         return handle_test_telegram(handler)
     if method == "POST" and re.match(r"^/api/auth/test-smtp$", path):
         return handle_test_smtp(handler)
+    if method == "POST" and re.match(r"^/api/auth/google$", path):
+        return handle_google_auth(handler)
 
     # ── Platform Admin Routes ───────────────────────────────
     if method == "GET" and re.match(r"^/api/platform/settings$", path):
@@ -2155,6 +2287,10 @@ def route_request(handler, method, path, query):
     # /api/health
     if method == "GET" and re.match(r"^/api/health$", path):
         return handle_health(handler)
+
+    # /api/config/google-client-id
+    if method == "GET" and re.match(r"^/api/config/google-client-id$", path):
+        return handle_google_config(handler)
 
     # /api/users
     if method == "GET" and re.match(r"^/api/users$", path):

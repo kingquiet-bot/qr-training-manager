@@ -19,6 +19,9 @@
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script>
     tailwind.config = {
       theme: {
@@ -332,6 +335,20 @@
                 Sign In
               </button>
             </form>
+
+            <!-- Google Sign-In -->
+            <div class="mt-4">
+              <div class="relative">
+                <div class="absolute inset-0 flex items-center">
+                  <div class="w-full border-t border-gray-200"></div>
+                </div>
+                <div class="relative flex justify-center text-sm">
+                  <span class="bg-white px-3 text-gray-400">or</span>
+                </div>
+              </div>
+              <div id="google-signin-btn" class="mt-4 flex justify-center"></div>
+            </div>
+
             <p class="text-sm text-gray-500 text-center mt-4">
               Don't have an account? <a href="#" id="show-register" class="text-brand-600 font-semibold hover:underline">Register</a>
             </p>
@@ -1167,8 +1184,62 @@
           }
         } else {
           switchTab('auth');
+          initGoogleSignIn();
         }
       })();
+
+      // ── Google Identity Services ────────────────────────────
+      async function initGoogleSignIn() {
+        try {
+          const res = await fetch('/api/config/google-client-id');
+          const config = await res.json();
+          if (!config.client_id) {
+            console.log('Google Client ID not configured — Google sign-in disabled');
+            return;
+          }
+
+          // Wait for Google library to load
+          if (typeof google === 'undefined' || !google.accounts) {
+            setTimeout(initGoogleSignIn, 500);
+            return;
+          }
+
+          google.accounts.id.initialize({
+            client_id: config.client_id,
+            callback: handleGoogleCredential,
+          });
+
+          google.accounts.id.renderButton(
+            document.getElementById('google-signin-btn'),
+            { theme: 'outline', size: 'large', width: '100%', text: 'signin_with' }
+          );
+        } catch (err) {
+          console.log('Google sign-in init failed:', err);
+        }
+      }
+
+      async function handleGoogleCredential(response) {
+        try {
+          const res = await fetch('/api/auth/google', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ credential: response.credential }),
+          });
+          const data = await res.json();
+          if (data.error) { toast(data.error, 'error'); return; }
+          authToken = data.token;
+          localStorage.setItem('auth_token', authToken);
+          authUser = data.user;
+          toast(`Welcome, ${data.user.name}!`);
+          if (!data.user.setup_complete) {
+            switchTab('setup');
+          } else {
+            switchTab('admin');
+          }
+        } catch (err) {
+          toast('Google sign-in failed. Please try again.', 'error');
+        }
+      }
 
       // ── Toast-based demos of the PWA ────────────────────────
       function renderAll() {
