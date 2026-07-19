@@ -77,3 +77,16 @@ You can pre-configure the credentials in your server environment (useful for Doc
 ### Issue 3: Logs show `OTP_FROM_EMAIL is required`
 - **Cause**: You set the `RESEND_API_KEY` but did not provide a sender email address.
 - **Solution**: Set both `RESEND_API_KEY` and `OTP_FROM_EMAIL` (or fill in both fields in the Platform Admin panel).
+
+---
+
+## FAQ: Can I use a Gmail address (`@gmail.com`) as my sender in Resend?
+
+No. You **cannot** use a free consumer email address (like `@gmail.com`, `@yahoo.com`, or `@outlook.com`) as your sender address in Resend. 
+
+### Why?
+Resend is a professional transactional email provider. To prevent spam and abuse, Resend requires you to add DNS records (DKIM and SPF) to verify that you own the domain. Since Google owns `gmail.com`, you cannot edit the DNS records for it. Any attempt to send emails pretending to be from `@gmail.com` via a third-party server like Resend will be blocked by strict DMARC policies and marked as spam or rejected.
+
+### What are the alternatives?
+1. **Get a custom domain (Recommended)**: You can purchase a domain (e.g. `yourname.com`) for a few dollars per year from registrars like Namecheap, GoDaddy, or Cloudflare. Once you have a domain, you can verify it in Resend and send from any address like `noreply@yourname.com`.
+2. **Use SMTP locally**: If you want to use your Gmail account to send emails, you can do so for local development (Option B in settings) by generating a Gmail App Password. However, this **will not work on Render** because Render blocks the SMTP connection ports.
