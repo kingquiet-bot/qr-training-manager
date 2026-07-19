@@ -142,7 +142,7 @@ Required in production:
 
 Required for OTP email on Render Free:
 - `RESEND_API_KEY` - HTTPS email API key
-- `OTP_FROM_EMAIL` - Sender on a verified Resend domain
+- `OTP_FROM_EMAIL` - Sender on a verified Resend domain (see [RESEND_SETUP.md](RESEND_SETUP.md) for domain verification and key setup steps)
 
 Optional:
 - `SMTP_EMAIL` - SMTP fallback address on hosts that permit SMTP

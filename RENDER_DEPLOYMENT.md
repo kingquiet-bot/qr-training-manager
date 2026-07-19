@@ -94,8 +94,7 @@ Value: replace_with_a_unique_12+_character_password
 ```
 
 Generate `MASTER_SECRET` locally with
-`python3 -c "import secrets; print(secrets.token_urlsafe(32))"`. For OTP email,
-create a Resend API key and verify the domain used by `OTP_FROM_EMAIL`.
+`python3 -c "import secrets; print(secrets.token_urlsafe(32))"`. For complete steps on setting up the Resend API, obtaining an API key, and verifying your domain, see [RESEND_SETUP.md](RESEND_SETUP.md).
 Render Free blocks outbound SMTP ports, so Gmail SMTP cannot deliver OTP email
 from a Free web service.
 

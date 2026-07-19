@@ -71,9 +71,10 @@ cp .env.example .env
    - Add `MASTER_SECRET`, `RESEND_API_KEY`, `OTP_FROM_EMAIL`, and bootstrap admin credentials
    - Deploy!
 
-### Detailed Guide:
+### Detailed Guides:
 
-See [RENDER_DEPLOYMENT.md](RENDER_DEPLOYMENT.md) for step-by-step instructions.
+- See [RENDER_DEPLOYMENT.md](RENDER_DEPLOYMENT.md) for step-by-step instructions.
+- See [RESEND_SETUP.md](RESEND_SETUP.md) for complete steps to configure the Resend API.
 
 ### Your Live URL (after deployment):
 
