@@ -55,7 +55,7 @@ This guide explains how to deploy the QR Training Manager application.
    ```bash
    docker run -d \
      --name qr-training \
-     -p 5000:5000 \
+     -p 5000:10000 \
      -e TELEGRAM_BOT_TOKEN=your_token_here \
      qr-training-manager
    ```
@@ -90,7 +90,7 @@ This guide explains how to deploy the QR Training Manager application.
    ```bash
    docker run -d \
      --name qr-training \
-     -p 5000:5000 \
+     -p 5000:10000 \
      -e TELEGRAM_BOT_TOKEN=your_token_here \
      yourusername/qr-training-manager:latest
    ```
@@ -135,12 +135,21 @@ This guide explains how to deploy the QR Training Manager application.
 
 ## Environment Variables
 
-Required:
-- `TELEGRAM_BOT_TOKEN` - Your Telegram bot token
+Required in production:
+- `MASTER_SECRET` - Stable random value used for JWT signing and encryption
+- `BOOTSTRAP_ADMIN_EMAIL` - Initial administrator email on Render
+- `BOOTSTRAP_ADMIN_PASSWORD` - Initial administrator password (12+ characters)
+
+Required for OTP email on Render Free:
+- `RESEND_API_KEY` - HTTPS email API key
+- `OTP_FROM_EMAIL` - Sender on a verified Resend domain
 
 Optional:
-- `SMTP_EMAIL` - Gmail address for email reports
-- `SMTP_PASSWORD` - Gmail app password
+- `SMTP_EMAIL` - SMTP fallback address on hosts that permit SMTP
+- `SMTP_PASSWORD` - SMTP fallback app password
+- `DATABASE_PATH` - SQLite path on a mounted persistent disk
+- `CORS_ORIGINS` - Comma-separated trusted cross-origin frontends
+- `TELEGRAM_BOT_TOKEN` - Telegram bot integration
 - `TELEGRAM_PROXY` - Proxy for Telegram bot (if behind firewall)
 
 ## Troubleshooting
@@ -189,7 +198,7 @@ python3 app.py
 
 # Docker
 docker build -t qr-training-manager .
-docker run -d -p 5000:5000 -e TELEGRAM_BOT_TOKEN=your_token qr-training-manager
+docker run -d -p 5000:10000 -e TELEGRAM_BOT_TOKEN=your_token qr-training-manager
 
 # Docker Hub
 docker tag qr-training-manager:latest yourusername/qr-training-manager:latest

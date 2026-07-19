@@ -62,7 +62,10 @@
       "Bash(git commit -m 'Fix mobile keyboard for manual check-in and auto-sync active_qr_list on registration *)",
       "Bash(git config *)",
       "Bash(git commit -m 'Add auto-cleanup of active_qr_list on event close and confirmation dialog *)",
-      "Bash(git commit -m 'Auto-populate active_qr_list when event goes live *)"
+      "Bash(git commit -m 'Auto-populate active_qr_list when event goes live *)",
+      "Bash(python3 -c \"import py_compile; py_compile.compile\\('app.py', doraise=True\\); print\\('app.py: OK'\\)\")",
+      "Bash(python3 -c \"import py_compile; py_compile.compile\\('crypto_utils.py', doraise=True\\); print\\('crypto_utils.py: OK'\\)\")",
+      "Bash(DEV_MODE=true python3 app.py)"
     ]
   },
   "disabledMcpjsonServers": [

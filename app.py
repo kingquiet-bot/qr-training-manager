@@ -26,9 +26,11 @@ import uuid
 import io
 import csv
 import smtplib
-import random
+import secrets
 import string
 import time
+import urllib.error
+import urllib.request
 from email.message import EmailMessage
 from datetime import datetime, timezone, timedelta
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -39,12 +41,7 @@ import jwt
 
 from crypto_utils import encrypt, decrypt
 
-# ── Configuration ──────────────────────────────────────────────
-HOST = "0.0.0.0"
-PORT = 5000
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATABASE = os.path.join(BASE_DIR, "attendance.db")
-DEV_MODE = os.environ.get("DEV_MODE", "false").lower() in ("true", "1", "yes")
 
 # Load .env file if present (simple parser, no external deps)
 _ENV_FILE = os.path.join(BASE_DIR, ".env")
@@ -59,6 +56,25 @@ if os.path.isfile(_ENV_FILE):
             val = val.strip().strip('"').strip("'")
             if key and key not in os.environ:
                 os.environ[key] = val
+
+# ── Configuration ──────────────────────────────────────────────
+HOST = os.environ.get("HOST", "0.0.0.0")
+PORT = int(os.environ.get("PORT", "5000"))
+_database_path = os.environ.get("DATABASE_PATH", "attendance.db")
+DATABASE = (
+    _database_path
+    if os.path.isabs(_database_path)
+    else os.path.join(BASE_DIR, _database_path)
+)
+DEV_MODE = os.environ.get("DEV_MODE", "false").lower() in ("true", "1", "yes")
+IS_RENDER = os.environ.get("RENDER", "false").lower() == "true"
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "").strip()
+OTP_FROM_EMAIL = os.environ.get("OTP_FROM_EMAIL", "").strip()
+CORS_ORIGINS = {
+    origin.strip().rstrip("/")
+    for origin in os.environ.get("CORS_ORIGINS", "").split(",")
+    if origin.strip()
+}
 
 # ── Database Initialization ────────────────────────────────────
 def migrate_db(db):
@@ -82,6 +98,7 @@ def migrate_db(db):
 
 def init_db():
     """Create tables if they don't exist; safe to call on every start."""
+    os.makedirs(os.path.dirname(DATABASE), exist_ok=True)
     db = sqlite3.connect(DATABASE)
     db.execute("PRAGMA journal_mode=WAL")
     db.execute("PRAGMA foreign_keys=ON")
@@ -204,39 +221,48 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_accounts_email ON accounts(email);
     """)
 
-    # Sync platform settings from environment variables (env vars always win)
+    # Environment variables override SMTP settings only when explicitly set.
+    # This preserves values saved through the platform admin UI across restarts.
     smtp_email = os.environ.get("SMTP_EMAIL", "")
     smtp_pass = os.environ.get("SMTP_PASSWORD", "")
-    db.executemany(
-        """INSERT INTO platform_settings (key, value) VALUES (?, ?)
-           ON CONFLICT(key) DO UPDATE SET value = excluded.value""",
-        [
-            ("registration_open", "true"),
-            ("platform_smtp_email", smtp_email),
-            ("platform_smtp_password", encrypt(smtp_pass) if smtp_pass else ""),
-            ("platform_smtp_server", "smtp.gmail.com"),
-            ("platform_smtp_port", "587"),
-        ],
+    db.execute(
+        "INSERT OR IGNORE INTO platform_settings (key, value) VALUES ('registration_open', 'true')"
     )
+    smtp_updates = []
+    if smtp_email:
+        smtp_updates.append(("platform_smtp_email", smtp_email))
+    if smtp_pass:
+        smtp_updates.append(("platform_smtp_password", encrypt(smtp_pass)))
+    if smtp_updates:
+        smtp_updates.extend([
+            ("platform_smtp_server", os.environ.get("SMTP_SERVER", "smtp.gmail.com")),
+            ("platform_smtp_port", os.environ.get("SMTP_PORT", "587")),
+        ])
+        db.executemany(
+            """INSERT INTO platform_settings (key, value) VALUES (?, ?)
+               ON CONFLICT(key) DO UPDATE SET value = excluded.value""",
+            smtp_updates,
+        )
     db.commit()
 
     # Run any pending schema migrations (add new columns, etc.)
     migrate_db(db)
 
-    # Reset: clear all accounts and create default super admin
-    db.execute("DELETE FROM user_credentials")
-    db.execute("DELETE FROM admin_audit_log")
-    db.execute("DELETE FROM accounts")
-    default_pw_hash = hash_password("Admin@4583")
-    db.execute(
-        """INSERT INTO accounts (id, email, password_hash, name, role, status,
-               auth_provider, setup_complete, created_at, last_login)
-           VALUES (?, 'superadmin@local', ?, 'Super Admin', 'super_admin', 'active',
-               'local', 1, ?, ?)""",
-        (gen_id("acc"), default_pw_hash,
-         datetime.now(timezone.utc).isoformat(),
-         datetime.now(timezone.utc).isoformat()),
-    )
+    # Optionally create a bootstrap administrator once. Never delete existing
+    # accounts or credentials during application startup.
+    account_count = db.execute("SELECT COUNT(*) FROM accounts").fetchone()[0]
+    bootstrap_email = os.environ.get("BOOTSTRAP_ADMIN_EMAIL", "").strip().lower()
+    bootstrap_password = os.environ.get("BOOTSTRAP_ADMIN_PASSWORD", "")
+    if account_count == 0 and bootstrap_email and bootstrap_password:
+        now = datetime.now(timezone.utc).isoformat()
+        db.execute(
+            """INSERT INTO accounts (id, email, password_hash, name, role, status,
+                   auth_provider, setup_complete, created_at, last_login)
+               VALUES (?, ?, ?, 'Super Admin', 'super_admin', 'active',
+                   'local', 1, ?, ?)""",
+            (gen_id("acc"), bootstrap_email, hash_password(bootstrap_password), now, now),
+        )
+        print(f"Created bootstrap administrator: {bootstrap_email}")
     db.commit()
 
     db.close()
@@ -255,15 +281,29 @@ def get_db():
     return db
 
 
+def send_cors_headers(handler):
+    """Add CORS headers only for explicitly allowed cross-origin clients."""
+    origin = (handler.headers.get("Origin") or "").rstrip("/")
+    if not origin:
+        return
+    if "*" in CORS_ORIGINS:
+        handler.send_header("Access-Control-Allow-Origin", "*")
+    elif origin in CORS_ORIGINS:
+        handler.send_header("Access-Control-Allow-Origin", origin)
+        handler.send_header("Vary", "Origin")
+    else:
+        return
+    handler.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+    handler.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+
 def json_response(handler, data, status=200):
     """Send a JSON response."""
     body = json.dumps(data, default=str).encode("utf-8")
     handler.send_response(status)
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Content-Length", str(len(body)))
-    handler.send_header("Access-Control-Allow-Origin", "*")
-    handler.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-    handler.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+    send_cors_headers(handler)
     handler.end_headers()
     handler.wfile.write(body)
 
@@ -282,7 +322,8 @@ def read_json_body(handler):
 
 # ── Auth Helpers ──────────────────────────────────────────────
 
-JWT_SECRET = os.environ.get("MASTER_SECRET", "dev-fallback-secret-change-me")
+MASTER_SECRET = os.environ.get("MASTER_SECRET", "").strip()
+JWT_SECRET = MASTER_SECRET or "dev-fallback-secret-change-me"
 JWT_EXPIRY_HOURS = 24
 OTP_EXPIRY_MINUTES = 5
 OTP_MAX_ATTEMPTS = 5
@@ -335,49 +376,242 @@ def extract_token(handler) -> str:
 
 def generate_otp() -> str:
     """Generate a 6-digit OTP code."""
-    return "".join(random.choices(string.digits, k=6))
+    return "".join(secrets.choice(string.digits) for _ in range(6))
 
 
-def send_otp_email(email: str, otp_code: str) -> bool:
-    """Send OTP verification email using platform SMTP settings."""
+def get_platform_email_settings():
+    """Resolve active platform email settings from DB with environment fallbacks."""
     db = get_db()
     try:
-        settings = {
-            r["key"]: r["value"]
-            for r in db.execute("SELECT * FROM platform_settings").fetchall()
-        }
+        rows = db.execute("SELECT key, value FROM platform_settings").fetchall()
+        settings = {r["key"]: r["value"] for r in rows}
+    except Exception:
+        settings = {}
     finally:
         db.close()
 
-    smtp_user = settings.get("platform_smtp_email", "")
+    # 1. Resend Settings
+    resend_key_raw = settings.get("platform_resend_api_key", "")
+    try:
+        resend_key = decrypt(resend_key_raw) if resend_key_raw else ""
+    except Exception:
+        resend_key = ""
+    if not resend_key:
+        resend_key = os.environ.get("RESEND_API_KEY", "").strip()
+
+    resend_from = settings.get("platform_resend_from_email", "")
+    if not resend_from:
+        resend_from = os.environ.get("OTP_FROM_EMAIL", "").strip()
+
+    # 2. SMTP Settings
+    smtp_email = settings.get("platform_smtp_email", "")
+    if not smtp_email:
+        smtp_email = os.environ.get("SMTP_EMAIL", "").strip()
+
     smtp_pass_raw = settings.get("platform_smtp_password", "")
-    smtp_pass = decrypt(smtp_pass_raw) if smtp_pass_raw else ""
-    smtp_server = settings.get("platform_smtp_server", "smtp.gmail.com")
-    smtp_port = int(settings.get("platform_smtp_port", "587"))
+    try:
+        smtp_pass = decrypt(smtp_pass_raw) if smtp_pass_raw else ""
+    except Exception:
+        smtp_pass = ""
+    if not smtp_pass:
+        smtp_pass = os.environ.get("SMTP_PASSWORD", "").strip()
 
-    if not smtp_user or not smtp_pass:
-        return False
+    smtp_server = settings.get("platform_smtp_server", "")
+    if not smtp_server:
+        smtp_server = os.environ.get("SMTP_SERVER", "smtp.gmail.com").strip()
 
-    msg = EmailMessage()
-    msg["Subject"] = "Your Verification Code — Training Attendance Manager"
-    msg["From"] = smtp_user
-    msg["To"] = email
-    msg.set_content(
-        f"Your verification code is: {otp_code}\n\n"
-        f"This code expires in {OTP_EXPIRY_MINUTES} minutes.\n"
-        f"If you did not request this, please ignore this email.\n"
+    try:
+        smtp_port = int(settings.get("platform_smtp_port", "587"))
+    except (ValueError, TypeError):
+        try:
+            smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+        except (ValueError, TypeError):
+            smtp_port = 587
+
+    return {
+        "resend_key": resend_key,
+        "resend_from": resend_from,
+        "smtp_email": smtp_email,
+        "smtp_pass": smtp_pass,
+        "smtp_server": smtp_server,
+        "smtp_port": smtp_port,
+    }
+
+
+def _send_via_resend(
+    to_email: str,
+    subject: str,
+    text_content: str,
+    api_key: str,
+    from_email: str,
+    attachment_data: bytes = None,
+    attachment_name: str = None,
+) -> bool:
+    """Send email via Resend API (HTTPS)."""
+    import base64
+    payload_dict = {
+        "from": from_email,
+        "to": [to_email],
+        "subject": subject,
+        "text": text_content,
+    }
+    
+    if attachment_data and attachment_name:
+        encoded = base64.b64encode(attachment_data).decode("utf-8")
+        payload_dict["attachments"] = [
+            {
+                "content": encoded,
+                "filename": attachment_name,
+            }
+        ]
+        
+    payload = json.dumps(payload_dict).encode("utf-8")
+    request = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=payload,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "qr-training-manager/1.0",
+            "Idempotency-Key": f"email-{uuid.uuid4().hex}",
+        },
     )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            if 200 <= response.status < 300:
+                print(f"Email to {to_email} accepted by Resend")
+                return True
+            print(f"Resend HTTP {response.status}")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:500]
+        print(f"Email rejected by Resend (HTTP {exc.code}): {detail}")
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        print(f"Email could not reach Resend: {type(exc).__name__}: {exc}")
+    return False
 
+
+def send_email_with_resend(email: str, subject: str, text_content: str) -> bool:
+    """Deprecated: Send transactional email over HTTPS. Use send_email instead."""
+    return _send_via_resend(email, subject, text_content, RESEND_API_KEY, OTP_FROM_EMAIL)
+
+
+def _send_via_smtp(
+    to_email: str,
+    subject: str,
+    text_content: str,
+    smtp_user: str,
+    smtp_pass: str,
+    smtp_server: str,
+    smtp_port: int,
+    attachment_data: bytes = None,
+    attachment_name: str = None,
+) -> bool:
+    """Send email via SMTP."""
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = smtp_user
+    msg["To"] = to_email
+    msg.set_content(text_content)
+    
+    if attachment_data and attachment_name:
+        msg.add_attachment(
+            attachment_data,
+            maintype="application",
+            subtype="octet-stream",
+            filename=attachment_name,
+        )
+        
     try:
         with smtplib.SMTP(smtp_server, smtp_port, timeout=15) as server:
             server.ehlo()
-            server.starttls()
-            server.ehlo()
+            if smtp_port == 587:
+                server.starttls()
+                server.ehlo()
             server.login(smtp_user, smtp_pass)
             server.send_message(msg)
+        print(f"Email to {to_email} sent through SMTP server {smtp_server}:{smtp_port}")
         return True
-    except Exception:
-        return False
+    except smtplib.SMTPAuthenticationError:
+        print("SMTP authentication failed; check credentials / app password")
+    except (smtplib.SMTPException, TimeoutError, OSError) as exc:
+        print(f"SMTP failure: {type(exc).__name__}: {exc}")
+    except Exception as exc:
+        print(f"Unexpected SMTP failure: {type(exc).__name__}: {exc}")
+    return False
+
+
+def send_email(
+    to_email: str,
+    subject: str,
+    text_content: str,
+    attachment_data: bytes = None,
+    attachment_name: str = None,
+    tenant_creds: dict = None,
+) -> bool:
+    """Send an email using Resend (HTTPS) if configured, falling back to SMTP."""
+    # 1. Check if we should use per-tenant SMTP settings first (for reports)
+    if tenant_creds and tenant_creds.get("smtp_email") and tenant_creds.get("smtp_password"):
+        smtp_user = tenant_creds["smtp_email"]
+        smtp_pass = tenant_creds["smtp_password"]
+        smtp_server = tenant_creds.get("smtp_server", "smtp.gmail.com")
+        try:
+            smtp_port = int(tenant_creds.get("smtp_port", 587))
+        except (ValueError, TypeError):
+            smtp_port = 587
+        
+        return _send_via_smtp(
+            to_email,
+            subject,
+            text_content,
+            smtp_user,
+            smtp_pass,
+            smtp_server,
+            smtp_port,
+            attachment_data,
+            attachment_name,
+        )
+
+    # 2. Otherwise use Platform settings (Resend HTTPS preferred, SMTP fallback)
+    cfg = get_platform_email_settings()
+    
+    if cfg["resend_key"] and cfg["resend_from"]:
+        return _send_via_resend(
+            to_email,
+            subject,
+            text_content,
+            cfg["resend_key"],
+            cfg["resend_from"],
+            attachment_data,
+            attachment_name,
+        )
+        
+    if cfg["smtp_email"] and cfg["smtp_pass"]:
+        return _send_via_smtp(
+            to_email,
+            subject,
+            text_content,
+            cfg["smtp_email"],
+            cfg["smtp_pass"],
+            cfg["smtp_server"],
+            cfg["smtp_port"],
+            attachment_data,
+            attachment_name,
+        )
+        
+    print("Email not sent: neither Resend nor SMTP is fully configured.")
+    return False
+
+
+def send_otp_email(email: str, otp_code: str) -> bool:
+    """Send OTP through Resend (HTTPS) or SMTP fallback."""
+    subject = "Your Verification Code — Training Attendance Manager"
+    text_content = (
+        f"Your verification code is: {otp_code}\n\n"
+        f"This code expires in {OTP_EXPIRY_MINUTES} minutes.\n"
+        "If you did not request this, please ignore this email.\n"
+    )
+    return send_email(email, subject, text_content)
 
 
 def get_user_credentials(account_id: str):
@@ -951,72 +1185,41 @@ def handle_email_report(handler, event_id):
         csv_content = output.getvalue()
         output.close()
 
-        # ── Resolve SMTP credentials (per-tenant → platform fallback) ──
-        smtp_user = ""
-        smtp_pass = ""
-        smtp_server = "smtp.gmail.com"
-        smtp_port = 587
-
-        # Try per-tenant credentials first
+        # ── Resolve SMTP credentials (per-tenant) ──
+        tenant_creds = None
         if event["owner_id"]:
             creds = get_user_credentials(event["owner_id"])
             if creds and creds.get("smtp_email") and creds.get("smtp_password"):
-                smtp_user = creds["smtp_email"]
-                smtp_pass = creds["smtp_password"]
-                smtp_server = creds.get("smtp_server", "smtp.gmail.com")
-                smtp_port = creds.get("smtp_port", 587)
+                tenant_creds = {
+                    "smtp_email": creds["smtp_email"],
+                    "smtp_password": creds["smtp_password"],
+                    "smtp_server": creds.get("smtp_server", "smtp.gmail.com"),
+                    "smtp_port": creds.get("smtp_port", 587),
+                }
 
-        # Fallback to platform SMTP
-        if not smtp_user or not smtp_pass:
-            settings = {
-                r["key"]: r["value"]
-                for r in db.execute("SELECT * FROM platform_settings").fetchall()
-            }
-            smtp_user = settings.get("platform_smtp_email", "")
-            smtp_pass_raw = settings.get("platform_smtp_password", "")
-            smtp_pass = decrypt(smtp_pass_raw) if smtp_pass_raw else ""
-            smtp_server = settings.get("platform_smtp_server", "smtp.gmail.com")
-            smtp_port = int(settings.get("platform_smtp_port", "587"))
-
-        if not smtp_user or not smtp_pass:
-            return json_response(handler, {
-                "error": "SMTP not configured",
-                "message": "No SMTP credentials found. Please set up your email in Settings.",
-            }, 500)
-
-        msg = EmailMessage()
-        msg["Subject"] = f"Attendance Report: {event['name']} — {event['date']}"
-        msg["From"] = smtp_user
-        msg["To"] = to_email
-        msg.set_content(
+        # ── Send the email report ──
+        subject = f"Attendance Report: {event['name']} — {event['date']}"
+        text_content = (
             f"Attached is the attendance report for:\n\n"
             f"  {event['name']}\n"
             f"  Date: {event['date']}\n\n"
             f"Generated by Training Attendance Manager.\n"
         )
-        msg.add_attachment(
-            csv_content.encode("utf-8"),
-            maintype="text",
-            subtype="csv",
-            filename=f"attendance_{event['name'].replace(' ', '_')}_{event['date']}.csv",
+        filename = f"attendance_{event['name'].replace(' ', '_')}_{event['date']}.csv"
+        
+        sent = send_email(
+            to_email=to_email,
+            subject=subject,
+            text_content=text_content,
+            attachment_data=csv_content.encode("utf-8"),
+            attachment_name=filename,
+            tenant_creds=tenant_creds,
         )
 
-        try:
-            with smtplib.SMTP(smtp_server, smtp_port, timeout=15) as server:
-                server.ehlo()
-                server.starttls()
-                server.ehlo()
-                server.login(smtp_user, smtp_pass)
-                server.send_message(msg)
-        except smtplib.SMTPAuthenticationError:
+        if not sent:
             return json_response(handler, {
-                "error": "SMTP authentication failed",
-                "message": "Check your SMTP credentials. For Gmail, use an App Password.",
-            }, 500)
-        except smtplib.SMTPException as e:
-            return json_response(handler, {
-                "error": "SMTP send failed",
-                "message": str(e),
+                "error": "Email delivery failed",
+                "message": "Verify your SMTP or Resend settings in the platform or tenant credentials.",
             }, 500)
 
         return json_response(handler, {
@@ -1287,7 +1490,7 @@ def handle_self_checkin_page(handler, query):
     handler.send_response(200)
     handler.send_header("Content-Type", "text/html; charset=utf-8")
     handler.send_header("Content-Length", str(len(body_bytes)))
-    handler.send_header("Access-Control-Allow-Origin", "*")
+    send_cors_headers(handler)
     handler.end_headers()
     handler.wfile.write(body_bytes)
 
@@ -1546,7 +1749,7 @@ def html_page(handler, title, message, page_type):
     handler.send_response(200)
     handler.send_header("Content-Type", "text/html; charset=utf-8")
     handler.send_header("Content-Length", str(len(body_bytes)))
-    handler.send_header("Access-Control-Allow-Origin", "*")
+    send_cors_headers(handler)
     handler.end_headers()
     handler.wfile.write(body_bytes)
 
@@ -1636,12 +1839,16 @@ def handle_register(handler):
             return json_response(handler, resp, 201)
 
         if not send_otp_email(email, otp):
-            # Still return success but warn — account is created, OTP might need resend
+            # Let the user retry registration after configuration or provider
+            # recovery instead of leaving an unusable pending account behind.
+            db.execute(
+                "DELETE FROM accounts WHERE id = ? AND status = 'pending'",
+                (account_id,),
+            )
+            db.commit()
             return json_response(handler, {
-                "status": "pending",
-                "message": "Account created. OTP email could not be sent — use resend.",
-                "account_id": account_id,
-            }, 201)
+                "error": "Verification email could not be sent. Please try again shortly.",
+            }, 503)
 
         return json_response(handler, {
             "status": "pending",
@@ -2085,8 +2292,8 @@ def handle_platform_settings(handler):
             settings = {}
             for r in rows:
                 val = r["value"]
-                # Don't expose encrypted SMTP password in full
-                if r["key"] == "platform_smtp_password":
+                # Don't expose sensitive keys in full
+                if r["key"] in ("platform_smtp_password", "platform_resend_api_key"):
                     val = "***hidden***" if val else ""
                 settings[r["key"]] = val
             return json_response(handler, settings)
@@ -2094,7 +2301,7 @@ def handle_platform_settings(handler):
         # POST — update settings
         body = read_json_body(handler)
         for key, value in body.items():
-            if key == "platform_smtp_password" and value and value != "***hidden***":
+            if key in ("platform_smtp_password", "platform_resend_api_key") and value and value != "***hidden***":
                 value = encrypt(value)
             db.execute(
                 "INSERT INTO platform_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -2278,7 +2485,7 @@ def serve_static(handler, path):
         handler.send_response(200)
         handler.send_header("Content-Type", "text/html; charset=utf-8")
         handler.send_header("Content-Length", str(len(content)))
-        handler.send_header("Access-Control-Allow-Origin", "*")
+        send_cors_headers(handler)
         handler.end_headers()
         handler.wfile.write(content)
     else:
@@ -2487,9 +2694,7 @@ class RequestHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         """Handle CORS preflight."""
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        send_cors_headers(self)
         self.end_headers()
 
     def do_GET(self):
@@ -2513,7 +2718,54 @@ class RequestHandler(BaseHTTPRequestHandler):
 
 
 # ── Main ───────────────────────────────────────────────────────
+def validate_runtime_config():
+    """Fail fast for unsafe or incomplete production configuration."""
+    errors = []
+    bootstrap_email = os.environ.get("BOOTSTRAP_ADMIN_EMAIL", "").strip()
+    bootstrap_password = os.environ.get("BOOTSTRAP_ADMIN_PASSWORD", "")
+    smtp_email = os.environ.get("SMTP_EMAIL", "").strip()
+    smtp_password = os.environ.get("SMTP_PASSWORD", "")
+
+    if IS_RENDER and HOST != "0.0.0.0":
+        errors.append("HOST must be 0.0.0.0 on Render")
+    if IS_RENDER and not MASTER_SECRET:
+        errors.append("MASTER_SECRET is required on Render for JWT signing and encryption")
+    if bool(RESEND_API_KEY) != bool(OTP_FROM_EMAIL):
+        errors.append("RESEND_API_KEY and OTP_FROM_EMAIL must be configured together")
+    if bool(smtp_email) != bool(smtp_password):
+        errors.append("SMTP_EMAIL and SMTP_PASSWORD must be configured together")
+    if smtp_password and not MASTER_SECRET:
+        errors.append("MASTER_SECRET is required when SMTP_PASSWORD is configured")
+    if bool(bootstrap_email) != bool(bootstrap_password):
+        errors.append(
+            "BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD must be configured together"
+        )
+    if IS_RENDER and not bootstrap_email and not bootstrap_password:
+        errors.append(
+            "BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD are required on Render"
+        )
+    if bootstrap_password and len(bootstrap_password) < 12:
+        errors.append("BOOTSTRAP_ADMIN_PASSWORD must contain at least 12 characters")
+
+    if errors:
+        raise RuntimeError("Invalid configuration: " + "; ".join(errors))
+
+    if not MASTER_SECRET:
+        print("WARNING: MASTER_SECRET is unset; using an insecure development JWT secret")
+    if IS_RENDER and not RESEND_API_KEY:
+        print(
+            "WARNING: RESEND_API_KEY is unset. SMTP does not work on Render Free; "
+            "OTP delivery requires an HTTPS email provider."
+        )
+    if IS_RENDER and os.environ.get("DATABASE_PATH", "attendance.db") == "attendance.db":
+        print(
+            "WARNING: SQLite is using Render's ephemeral filesystem. Set DATABASE_PATH "
+            "to a mounted persistent disk path for durable accounts and OTP records."
+        )
+
+
 def main():
+    validate_runtime_config()
     init_db()
     server = HTTPServer((HOST, PORT), RequestHandler)
     print(f"📋 Database: {DATABASE}")

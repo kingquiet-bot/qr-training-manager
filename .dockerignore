@@ -3,6 +3,8 @@
 .gitignore
 .env
 .env.example
+attendance.db
+*.db
 *.md
 !README.md
 assets/

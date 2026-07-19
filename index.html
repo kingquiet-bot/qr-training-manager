@@ -490,18 +490,35 @@
           </div>
         </div>
 
-        <!-- Platform SMTP Settings -->
+        <!-- Platform Email settings -->
         <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-          <h3 class="font-bold text-gray-800 mb-3">Platform SMTP (OTP Emails)</h3>
-          <p class="text-sm text-gray-500 mb-3">Used to send verification codes during registration</p>
-          <div class="space-y-3">
-            <input type="email" id="platform-smtp-email"
-              class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none" placeholder="SMTP Email" />
-            <input type="password" id="platform-smtp-password"
-              class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none" placeholder="SMTP Password (App Password)" />
-            <button id="btn-save-platform-smtp"
+          <h3 class="font-bold text-gray-800 mb-3">Platform Email Delivery</h3>
+          <p class="text-sm text-gray-500 mb-3">Choose either Resend (HTTPS, recommended for Render) or SMTP to deliver OTP codes and reports.</p>
+          
+          <div class="border-b border-gray-200 pb-3 mb-4">
+            <h4 class="font-semibold text-gray-700 text-sm mb-2">Option A: Resend API (HTTPS)</h4>
+            <div class="space-y-3">
+              <input type="text" id="platform-resend-key"
+                class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none" placeholder="Resend API Key (re_...)" />
+              <input type="text" id="platform-resend-from"
+                class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none" placeholder="Sender Email (e.g. Training Manager <noreply@yourdomain.com>)" />
+            </div>
+          </div>
+
+          <div>
+            <h4 class="font-semibold text-gray-700 text-sm mb-2">Option B: SMTP Settings</h4>
+            <div class="space-y-3">
+              <input type="email" id="platform-smtp-email"
+                class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none" placeholder="SMTP Email" />
+              <input type="password" id="platform-smtp-password"
+                class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none" placeholder="SMTP Password (App Password)" />
+            </div>
+          </div>
+
+          <div class="mt-4 pt-3 border-t border-gray-100 flex justify-end">
+            <button id="btn-save-platform-email"
               class="bg-brand-600 hover:bg-brand-700 text-white font-semibold px-5 py-2.5 rounded-xl text-sm transition">
-              Save SMTP Settings
+              Save Email Settings
             </button>
           </div>
         </div>
@@ -1095,7 +1112,9 @@
           if (!res) return;
           const settings = await res.json();
           if ($('#toggle-registration')) $('#toggle-registration').checked = settings.registration_open === 'true';
-          if (settings.platform_smtp_email && $('#platform-smtp-email')) $('#platform-smtp-email').value = settings.platform_smtp_email;
+          if ($('#platform-smtp-email')) $('#platform-smtp-email').value = settings.platform_smtp_email || '';
+          if ($('#platform-resend-key')) $('#platform-resend-key').value = settings.platform_resend_api_key || '';
+          if ($('#platform-resend-from')) $('#platform-resend-from').value = settings.platform_resend_from_email || '';
         } catch {}
         // Load users (super_admin only)
         if (isSuperAdmin) {
@@ -1199,21 +1218,36 @@
         } catch {}
       });
 
-      $('#btn-save-platform-smtp').addEventListener('click', async () => {
+      $('#btn-save-platform-email').addEventListener('click', async () => {
         const email = $('#platform-smtp-email').value.trim();
         const password = $('#platform-smtp-password').value;
-        if (!email || !password) { toast('Enter email and password', 'error'); return; }
+        const resendKey = $('#platform-resend-key').value.trim();
+        const resendFrom = $('#platform-resend-from').value.trim();
+
+        if ((!email || !password) && (!resendKey || !resendFrom)) {
+          toast('Configure either Resend settings (Key & From Email) or SMTP settings (Email & Password).', 'error');
+          return;
+        }
+
         try {
           const res = await apiFetch('/api/platform/settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ platform_smtp_email: email, platform_smtp_password: password })
+            body: JSON.stringify({
+              platform_smtp_email: email,
+              platform_smtp_password: password,
+              platform_resend_api_key: resendKey,
+              platform_resend_from_email: resendFrom
+            })
           });
           if (!res) return;
           const data = await res.json();
           if (data.error) { toast(data.error, 'error'); return; }
-          toast('SMTP settings saved');
-          $('#platform-smtp-password').value = '';
+          toast('Email settings saved');
+          if (password) $('#platform-smtp-password').value = '';
+          if (resendKey && resendKey !== '***hidden***') {
+            $('#platform-resend-key').value = '***hidden***';
+          }
         } catch (err) { toast('Network error', 'error'); }
       });
 

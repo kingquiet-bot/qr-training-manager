@@ -69,25 +69,41 @@ Click "Advanced" → "Add Environment Variable" for each:
 #### Required Variables:
 
 ```
+Key: MASTER_SECRET
+Value: generate_a_long_random_value
+```
+
+```
+Key: RESEND_API_KEY
+Value: re_your_api_key
+```
+
+```
+Key: OTP_FROM_EMAIL
+Value: Training Manager <noreply@your_verified_domain.com>
+```
+
+```
+Key: BOOTSTRAP_ADMIN_EMAIL
+Value: admin@yourdomain.com
+```
+
+```
+Key: BOOTSTRAP_ADMIN_PASSWORD
+Value: replace_with_a_unique_12+_character_password
+```
+
+Generate `MASTER_SECRET` locally with
+`python3 -c "import secrets; print(secrets.token_urlsafe(32))"`. For OTP email,
+create a Resend API key and verify the domain used by `OTP_FROM_EMAIL`.
+Render Free blocks outbound SMTP ports, so Gmail SMTP cannot deliver OTP email
+from a Free web service.
+
+#### Optional Variables:
+
+```
 Key: TELEGRAM_BOT_TOKEN
 Value: your_telegram_bot_token_here
-```
-
-```
-Key: PYTHON_VERSION
-Value: 3.11.0
-```
-
-#### Optional Variables (for email reports):
-
-```
-Key: SMTP_EMAIL
-Value: your_email@gmail.com
-```
-
-```
-Key: SMTP_PASSWORD
-Value: your_gmail_app_password
 ```
 
 #### Optional Variables (if behind firewall):
@@ -164,7 +180,7 @@ Value: socks5://user:password@proxy:1080
    ```bash
    # Test locally first
    docker build -t qr-training-manager .
-   docker run -p 5000:5000 qr-training-manager
+   docker run -p 5000:10000 qr-training-manager
    ```
 
 2. **Check build logs:**
@@ -186,10 +202,10 @@ Value: socks5://user:password@proxy:1080
 **Solutions:**
 1. **Check start command:**
    - Render uses `Dockerfile` CMD
-   - Ensure `app.py` runs on port 5000
+   - `app.py` reads Render's `PORT` environment variable and binds to `0.0.0.0`
 
 2. **Check environment variables:**
-   - `TELEGRAM_BOT_TOKEN` must be set
+   - OTP and bootstrap administrator variables listed above must all be set
    - Check for typos
 
 3. **Check logs:**
@@ -202,23 +218,15 @@ Value: socks5://user:password@proxy:1080
 - First request takes 30+ seconds
 - Subsequent requests are fast
 
-**This is normal!** Render free tier sleeps after 15 min of inactivity.
+**This is normal.** Render Free spins down after periods of inactivity and its
+local filesystem is ephemeral. SQLite account and OTP data therefore is not
+durable on Free instances.
 
 **Solutions:**
 
-#### Option A: Keep-Alive Cron Job (Recommended)
-Add a cron job to ping your app every 10 minutes:
-
-```bash
-# Add to your project
-# Create keep_alive.py
-```
-
-I'll create this for you below.
-
-#### Option B: Upgrade to Paid Tier
-- $7/month for always-on
-- No sleep
+For persistent accounts, use a paid Render service with a persistent disk and
+set `DATABASE_PATH` to a path on that disk, such as
+`/var/data/attendance.db`, or migrate the application to a managed database.
 
 ### Issue 4: Environment Variables Not Working
 
@@ -228,7 +236,7 @@ I'll create this for you below.
 
 **Solutions:**
 1. **Check variable names:**
-   - Must be exact: `TELEGRAM_BOT_TOKEN` (case-sensitive)
+   - Variable names are case-sensitive; copy them from the setup section above
 
 2. **Check variable values:**
    - No extra spaces
@@ -344,9 +352,13 @@ https://qr-training-manager.onrender.com
 
 ### Environment Variables:
 ```
-TELEGRAM_BOT_TOKEN=your_token
-SMTP_EMAIL=your_email (optional)
-SMTP_PASSWORD=your_password (optional)
+MASTER_SECRET=your_stable_random_secret
+RESEND_API_KEY=re_your_api_key
+OTP_FROM_EMAIL=Training Manager <noreply@your_verified_domain.com>
+BOOTSTRAP_ADMIN_EMAIL=admin@yourdomain.com
+BOOTSTRAP_ADMIN_PASSWORD=replace_with_a_unique_12+_character_password
+TELEGRAM_BOT_TOKEN=your_token (optional)
+DATABASE_PATH=/var/data/attendance.db (paid persistent disk only)
 ```
 
 ### Useful Commands:
@@ -354,7 +366,7 @@ SMTP_PASSWORD=your_password (optional)
 ```bash
 # Test locally
 docker build -t qr-training-manager .
-docker run -p 5000:5000 qr-training-manager
+docker run -p 5000:10000 qr-training-manager
 
 # Deploy to Render
 git push origin main

@@ -34,7 +34,7 @@ cd qr-training-manager
 ### 2. Install Dependencies
 
 ```bash
-pip install python-telegram-bot qrcode[pil] Pillow python-dotenv flask
+pip install -r requirements.txt
 ```
 
 ### 3. Configure Environment Variables
@@ -44,9 +44,13 @@ pip install python-telegram-bot qrcode[pil] Pillow python-dotenv flask
 cp .env.example .env
 
 # Edit .env with your credentials
-# Required: TELEGRAM_BOT_TOKEN=your_token_here
-# Optional: SMTP_EMAIL=your_email@gmail.com
-# Optional: SMTP_PASSWORD=your_app_password
+# Required in production: MASTER_SECRET=generate_a_long_random_value
+# Required for OTP on Render Free: RESEND_API_KEY=re_your_api_key
+# Required with RESEND_API_KEY: OTP_FROM_EMAIL=noreply@your_verified_domain.com
+# Required on Render: BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD
+# Optional SMTP fallback on hosts that allow SMTP:
+# SMTP_EMAIL=your_email@gmail.com
+# SMTP_PASSWORD=your_gmail_app_password
 # Optional: GOOGLE_CLIENT_ID=your_client_id.apps.googleusercontent.com
 # Optional: TELEGRAM_PROXY=socks5://user:pass@proxy:1080
 ```
@@ -64,7 +68,7 @@ cp .env.example .env
    - Create new "Web Service"
    - Connect repository: `kingquiet-bot/qr-training-manager`
    - Select "Docker" runtime
-   - Add environment variables
+   - Add `MASTER_SECRET`, `RESEND_API_KEY`, `OTP_FROM_EMAIL`, and bootstrap admin credentials
    - Deploy!
 
 ### Detailed Guide:
@@ -77,17 +81,12 @@ See [RENDER_DEPLOYMENT.md](RENDER_DEPLOYMENT.md) for step-by-step instructions.
 https://qr-training-manager.onrender.com
 ```
 
-### Keep-Alive (Prevent Sleep):
+### Free-instance persistence
 
-Render free tier sleeps after 15 min of inactivity. Use the keep-alive script:
-
-```bash
-# Run locally (keeps app awake)
-python3 keep_alive.py
-
-# Or use GitHub Actions (automatic)
-# See keep-alive.yml workflow
-```
+Render Free services spin down when idle and use an ephemeral filesystem.
+SQLite accounts and pending OTPs are therefore intended only for evaluation on
+that tier. For durable production data, use a paid persistent disk with
+`DATABASE_PATH` or migrate to a managed database.
 
 ### 4. Start the Application
 

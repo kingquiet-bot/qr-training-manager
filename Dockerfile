@@ -9,8 +9,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application files
 COPY . .
 
-# Expose port
-EXPOSE 5000
+# Render's default web-service port. app.py reads the runtime PORT variable.
+ENV PORT=10000
+EXPOSE 10000
 
 # Run the application
 CMD ["python", "app.py"]
