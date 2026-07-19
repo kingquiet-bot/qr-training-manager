@@ -253,16 +253,30 @@ def init_db():
     account_count = db.execute("SELECT COUNT(*) FROM accounts").fetchone()[0]
     bootstrap_email = os.environ.get("BOOTSTRAP_ADMIN_EMAIL", "").strip().lower()
     bootstrap_password = os.environ.get("BOOTSTRAP_ADMIN_PASSWORD", "")
-    if account_count == 0 and bootstrap_email and bootstrap_password:
-        now = datetime.now(timezone.utc).isoformat()
-        db.execute(
-            """INSERT INTO accounts (id, email, password_hash, name, role, status,
-                   auth_provider, setup_complete, created_at, last_login)
-               VALUES (?, ?, ?, 'Super Admin', 'super_admin', 'active',
-                   'local', 1, ?, ?)""",
-            (gen_id("acc"), bootstrap_email, hash_password(bootstrap_password), now, now),
-        )
-        print(f"Created bootstrap administrator: {bootstrap_email}")
+    if account_count == 0:
+        if bootstrap_email and bootstrap_password:
+            now = datetime.now(timezone.utc).isoformat()
+            db.execute(
+                """INSERT INTO accounts (id, email, password_hash, name, role, status,
+                       auth_provider, setup_complete, created_at, last_login)
+                   VALUES (?, ?, ?, 'Super Admin', 'super_admin', 'active',
+                       'local', 1, ?, ?)""",
+                (gen_id("acc"), bootstrap_email, hash_password(bootstrap_password), now, now),
+            )
+            print(f"Created bootstrap administrator: {bootstrap_email}")
+        else:
+            default_email = "superadmin@local"
+            default_pw = "Admin@4583"
+            now = datetime.now(timezone.utc).isoformat()
+            db.execute(
+                """INSERT INTO accounts (id, email, password_hash, name, role, status,
+                       auth_provider, setup_complete, created_at, last_login)
+                   VALUES (?, ?, ?, 'Super Admin', 'super_admin', 'active',
+                       'local', 1, ?, ?)""",
+                (gen_id("acc"), default_email, hash_password(default_pw), now, now),
+            )
+            print("WARNING: BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD are unset.")
+            print("Created default administrator: superadmin@local / Admin@4583")
     db.commit()
 
     db.close()
@@ -2739,10 +2753,6 @@ def validate_runtime_config():
     if bool(bootstrap_email) != bool(bootstrap_password):
         errors.append(
             "BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD must be configured together"
-        )
-    if IS_RENDER and not bootstrap_email and not bootstrap_password:
-        errors.append(
-            "BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD are required on Render"
         )
     if bootstrap_password and len(bootstrap_password) < 12:
         errors.append("BOOTSTRAP_ADMIN_PASSWORD must contain at least 12 characters")

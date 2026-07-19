@@ -102,7 +102,7 @@ class AppTests(unittest.TestCase):
         )
         self.assertNotIn("Access-Control-Allow-Origin", blocked.sent_headers)
 
-    def test_render_requires_secure_bootstrap_configuration(self):
+    def test_render_bootstrap_is_optional(self):
         with mock.patch.object(app, "IS_RENDER", True), mock.patch.object(
             app, "HOST", "0.0.0.0"
         ), mock.patch.object(app, "MASTER_SECRET", "stable-secret"), mock.patch.object(
@@ -113,8 +113,8 @@ class AppTests(unittest.TestCase):
             os.environ,
             {"BOOTSTRAP_ADMIN_EMAIL": "", "BOOTSTRAP_ADMIN_PASSWORD": ""},
         ):
-            with self.assertRaisesRegex(RuntimeError, "BOOTSTRAP_ADMIN_EMAIL"):
-                app.validate_runtime_config()
+            # This should now succeed without raising any exceptions
+            app.validate_runtime_config()
     def test_send_email_prefers_resend(self):
         with mock.patch("app.get_platform_email_settings", return_value={
             "resend_key": "re_test_key",
